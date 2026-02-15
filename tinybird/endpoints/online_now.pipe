@@ -1,0 +1,22 @@
+DESCRIPTION >
+	Entities (visitors + users) currently online. Queries the deduplicated MV.
+
+NODE online
+SQL >
+	%
+	SELECT
+		entity_id,
+		entity_type,
+		name,
+		image,
+		country_code,
+		city,
+		latitude,
+		longitude,
+		timestamp as last_seen
+	FROM presence_latest FINAL
+	WHERE website_id = {{ String(website_id) }}
+		AND timestamp > now() - INTERVAL {{ Int32(minutes, 10) }} MINUTE
+	ORDER BY last_seen DESC
+
+TYPE endpoint

@@ -1,27 +1,26 @@
 DESCRIPTION >
-	Count unique visitors by date range from seen events.
-	Returns current and previous period counts.
+	Count unique visitors by date range from presence events.
 
 NODE counts
 SQL >
 	%
 	SELECT
-		uniq(visitor_id) as unique_visitors,
+		uniq(entity_id) as unique_visitors,
 		'current' as period
-	FROM visitor_events
+	FROM presence_events
 	WHERE website_id = {{ String(website_id) }}
-		AND event_type = 'seen'
+		AND entity_type = 'visitor'
 		AND timestamp >= parseDateTimeBestEffort({{ String(date_from, '2024-01-01 00:00:00') }})
 		AND timestamp < parseDateTimeBestEffort({{ String(date_to, '2024-12-31 23:59:59') }})
 
 	UNION ALL
 
 	SELECT
-		uniq(visitor_id) as unique_visitors,
+		uniq(entity_id) as unique_visitors,
 		'previous' as period
-	FROM visitor_events
+	FROM presence_events
 	WHERE website_id = {{ String(website_id) }}
-		AND event_type = 'seen'
+		AND entity_type = 'visitor'
 		AND timestamp >= parseDateTimeBestEffort({{ String(prev_date_from, '2024-01-01 00:00:00') }})
 		AND timestamp < parseDateTimeBestEffort({{ String(prev_date_to, '2024-12-31 23:59:59') }})
 

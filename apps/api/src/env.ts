@@ -28,6 +28,8 @@ export const env = {
 	NODE_ENV: getEnvVariable("NODE_ENV"),
 	TINYBIRD_HOST: getEnvVariable("TINYBIRD_HOST", "http://localhost:7181"),
 	TINYBIRD_TOKEN: getEnvVariable("TINYBIRD_TOKEN", "admin"),
+	TINYBIRD_SIGNING_KEY: getEnvVariable("TINYBIRD_SIGNING_KEY", ""),
+	TINYBIRD_WORKSPACE: getEnvVariable("TINYBIRD_WORKSPACE", ""),
 	DATABASE_HOST: getEnvVariable("DATABASE_HOST"),
 	DATABASE_PORT: +getEnvVariable("DATABASE_PORT"),
 	DATABASE_USERNAME: getEnvVariable("DATABASE_USERNAME"),

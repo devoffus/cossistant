@@ -15,19 +15,17 @@ import { createTinybirdApi } from "@tinybirdco/sdk";
 // Types
 // ============================================================================
 
-export type VisitorEvent = {
+export type PresenceEvent = {
 	timestamp: Date;
 	website_id: string;
-	visitor_id: string;
-	session_id: string;
-	event_type: "seen" | "page_view";
+	entity_id: string;
+	entity_type: "visitor" | "user";
+	name: string;
+	image: string;
 	country_code: string;
 	city: string;
 	latitude: number;
 	longitude: number;
-	device_type: string;
-	browser: string;
-	page_url: string;
 };
 
 export type ConversationMetricEvent = {
@@ -45,7 +43,7 @@ export type ConversationMetricEvent = {
 	duration_seconds: number;
 };
 
-type TinybirdEvent = VisitorEvent | ConversationMetricEvent;
+type TinybirdEvent = PresenceEvent | ConversationMetricEvent;
 
 // ============================================================================
 // Configuration
@@ -157,7 +155,6 @@ class EventBuffer<T extends TinybirdEvent> {
 				`[Tinybird] Failed to flush ${events.length} events to ${this.datasource}:`,
 				error
 			);
-			// In production, consider sending to dead letter queue or re-adding to buffer
 		}
 	}
 
@@ -234,46 +231,43 @@ export async function ingestEvent<T extends TinybirdEvent>(
 // Event Buffers (Singleton Instances)
 // ============================================================================
 
-const visitorEventBuffer = new EventBuffer<VisitorEvent>("visitor_events");
+const presenceEventBuffer = new EventBuffer<PresenceEvent>("presence_events");
 const conversationMetricBuffer = new EventBuffer<ConversationMetricEvent>(
 	"conversation_metrics"
 );
 
 /**
- * Track a visitor event (seen, page_view).
+ * Track a presence heartbeat for a visitor or user.
  * Events are batched and flushed every 5 seconds or when 100 events are buffered.
  */
-export function trackVisitorEvent(
+export function trackPresence(
 	event: Omit<
-		VisitorEvent,
+		PresenceEvent,
 		| "timestamp"
-		| "latitude"
-		| "longitude"
+		| "name"
+		| "image"
 		| "country_code"
 		| "city"
-		| "device_type"
-		| "browser"
-		| "page_url"
+		| "latitude"
+		| "longitude"
 	> & {
+		name?: string;
+		image?: string;
 		country_code?: string;
 		city?: string;
 		latitude?: number;
 		longitude?: number;
-		device_type?: string;
-		browser?: string;
-		page_url?: string;
 	}
 ): void {
-	visitorEventBuffer.add({
+	presenceEventBuffer.add({
 		...event,
 		timestamp: new Date(),
-		latitude: event.latitude ?? 0,
-		longitude: event.longitude ?? 0,
+		name: event.name ?? "",
+		image: event.image ?? "",
 		country_code: event.country_code ?? "",
 		city: event.city ?? "",
-		device_type: event.device_type ?? "",
-		browser: event.browser ?? "",
-		page_url: event.page_url ?? "",
+		latitude: event.latitude ?? 0,
+		longitude: event.longitude ?? 0,
 	});
 }
 
@@ -335,110 +329,6 @@ export async function queryInboxAnalytics(
 	});
 }
 
-type UniqueVisitorsParams = {
-	website_id: string;
-	date_from: string; // ISO 8601
-	date_to: string; // ISO 8601
-	prev_date_from: string; // ISO 8601
-	prev_date_to: string; // ISO 8601
-};
-
-type UniqueVisitorsRow = {
-	unique_visitors: number;
-	period: "current" | "previous";
-};
-
-type UniqueVisitorsResponse = {
-	data: UniqueVisitorsRow[];
-};
-
-export async function queryUniqueVisitors(
-	params: UniqueVisitorsParams
-): Promise<UniqueVisitorsResponse> {
-	return withRetry(async () => {
-		const result = await tinybirdClient.query<UniqueVisitorsRow>(
-			"unique_visitors",
-			{
-				website_id: params.website_id,
-				date_from: params.date_from,
-				date_to: params.date_to,
-				prev_date_from: params.prev_date_from,
-				prev_date_to: params.prev_date_to,
-			}
-		);
-
-		return { data: result.data };
-	});
-}
-
-type ActiveVisitorsParams = {
-	website_id: string;
-	minutes?: number;
-};
-
-type ActiveVisitorRow = {
-	visitor_id: string;
-	city: string | null;
-	country_code: string | null;
-	latitude: number | null;
-	longitude: number | null;
-	last_seen: string; // ISO 8601
-};
-
-type ActiveVisitorsResponse = {
-	data: ActiveVisitorRow[];
-};
-
-export async function queryActiveVisitors(
-	params: ActiveVisitorsParams
-): Promise<ActiveVisitorsResponse> {
-	return withRetry(async () => {
-		const result = await tinybirdClient.query<ActiveVisitorRow>(
-			"active_visitors",
-			{
-				website_id: params.website_id,
-				minutes: (params.minutes ?? 10).toString(),
-			}
-		);
-
-		return { data: result.data };
-	});
-}
-
-type VisitorLocationsParams = {
-	website_id: string;
-	minutes?: number;
-};
-
-type VisitorLocationRow = {
-	latitude: number;
-	longitude: number;
-	city: string | null;
-	country_code: string | null;
-	visitor_count: number;
-	event_count: number;
-};
-
-type VisitorLocationsResponse = {
-	data: VisitorLocationRow[];
-};
-
-export async function queryVisitorLocations(
-	params: VisitorLocationsParams
-): Promise<VisitorLocationsResponse> {
-	return withRetry(async () => {
-		const result = await tinybirdClient.query<VisitorLocationRow>(
-			"visitor_locations",
-			{
-				website_id: params.website_id,
-				minutes: (params.minutes ?? 5).toString(),
-			}
-		);
-
-		return { data: result.data };
-	});
-}
-
 // ============================================================================
 // Graceful Shutdown
 // ============================================================================
@@ -449,7 +339,7 @@ export async function queryVisitorLocations(
  */
 export async function flushAllEvents(): Promise<void> {
 	await Promise.all([
-		visitorEventBuffer.destroy(),
+		presenceEventBuffer.destroy(),
 		conversationMetricBuffer.destroy(),
 	]);
 }

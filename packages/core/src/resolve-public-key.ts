@@ -1,3 +1,5 @@
+/// <reference path="./env.d.ts" />
+
 /**
  * Supported framework types for environment variable detection.
  */

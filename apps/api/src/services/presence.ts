@@ -1,6 +1,6 @@
 import type { Database } from "@api/db";
 import { getVisitorPresenceProfiles } from "@api/db/queries/visitor";
-import { trackVisitorEvent } from "@api/lib/tinybird-sdk";
+import { trackPresence } from "@api/lib/tinybird-sdk";
 import { waitForRedis } from "@api/redis";
 import {
 	PRESENCE_AWAY_WINDOW_MS,
@@ -208,15 +208,13 @@ export async function markVisitorPresence(params: {
 	visitorId: string;
 	lastSeenAt: string | number | Date;
 	sessionId?: string;
+	name?: string;
+	image?: string;
 	geo?: {
 		countryCode?: string;
 		city?: string;
 		latitude?: number;
 		longitude?: number;
-	};
-	device?: {
-		deviceType?: string;
-		browser?: string;
 	};
 }): Promise<void> {
 	try {
@@ -234,18 +232,16 @@ export async function markVisitorPresence(params: {
 		pipeline.expire(profileKey, PRESENCE_TTL_SECONDS);
 		await pipeline.exec();
 
-		// Track "seen" event in Tinybird for analytics
-		trackVisitorEvent({
+		trackPresence({
 			website_id: params.websiteId,
-			visitor_id: params.visitorId,
-			session_id: params.sessionId ?? params.visitorId,
-			event_type: "seen",
+			entity_id: params.visitorId,
+			entity_type: "visitor",
+			name: params.name,
+			image: params.image,
 			country_code: params.geo?.countryCode,
 			city: params.geo?.city,
 			latitude: params.geo?.latitude,
 			longitude: params.geo?.longitude,
-			device_type: params.device?.deviceType,
-			browser: params.device?.browser,
 		});
 	} catch (error) {
 		console.error("[Presence] Failed to mark visitor presence", {
@@ -260,6 +256,14 @@ export async function markUserPresence(params: {
 	websiteId: string;
 	userId: string;
 	lastSeenAt: string | number | Date;
+	name?: string;
+	image?: string;
+	geo?: {
+		countryCode?: string;
+		city?: string;
+		latitude?: number;
+		longitude?: number;
+	};
 }): Promise<void> {
 	try {
 		const redis = await waitForRedis();
@@ -275,6 +279,18 @@ export async function markUserPresence(params: {
 		pipeline.hset(profileKey, { lastSeenAt: iso });
 		pipeline.expire(profileKey, PRESENCE_TTL_SECONDS);
 		await pipeline.exec();
+
+		trackPresence({
+			website_id: params.websiteId,
+			entity_id: params.userId,
+			entity_type: "user",
+			name: params.name,
+			image: params.image,
+			country_code: params.geo?.countryCode,
+			city: params.geo?.city,
+			latitude: params.geo?.latitude,
+			longitude: params.geo?.longitude,
+		});
 	} catch (error) {
 		console.error("[Presence] Failed to mark user presence", {
 			websiteId: params.websiteId,

@@ -1,0 +1,19 @@
+DESCRIPTION >
+	Raw presence heartbeats for visitors and team members. 7-day TTL.
+
+SCHEMA >
+	`timestamp` DateTime `json:$.timestamp`,
+	`website_id` String `json:$.website_id`,
+	`entity_id` String `json:$.entity_id`,
+	`entity_type` LowCardinality(String) `json:$.entity_type`,
+	`name` String `json:$.name` DEFAULT '',
+	`image` String `json:$.image` DEFAULT '',
+	`country_code` LowCardinality(String) `json:$.country_code` DEFAULT '',
+	`city` LowCardinality(String) `json:$.city` DEFAULT '',
+	`latitude` Float32 `json:$.latitude` DEFAULT 0,
+	`longitude` Float32 `json:$.longitude` DEFAULT 0
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"
+ENGINE_SORTING_KEY "website_id, entity_type, entity_id, timestamp"
+ENGINE_TTL "timestamp + toIntervalDay(7)"

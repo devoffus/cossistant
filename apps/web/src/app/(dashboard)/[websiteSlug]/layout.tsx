@@ -86,15 +86,10 @@ export default async function Layout({ children, params }: LayoutProps) {
 			getNextPageParam: (lastPage) => lastPage.nextCursor,
 			pages: 1, // Prefetch the first page
 		}),
-		websiteSlug === "cossistant"
-			? prefetch(
-					trpc.conversation.getInboxAnalytics.queryOptions({
-						websiteSlug,
-						rangeDays: 7,
-					}),
-					handleAuthRedirect
-				)
-			: Promise.resolve(),
+		prefetch(
+			trpc.website.getTinybirdToken.queryOptions({ websiteSlug }),
+			handleAuthRedirect
+		),
 	]);
 
 	return (

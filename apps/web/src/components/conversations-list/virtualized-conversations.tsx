@@ -241,6 +241,7 @@ export function VirtualizedConversations({
 
 						return (
 							<div
+								className="-ml-1"
 								key={conversation.id}
 								style={{
 									position: "absolute",

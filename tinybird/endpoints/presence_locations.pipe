@@ -1,0 +1,21 @@
+DESCRIPTION >
+	Geo-aggregated presence for map visualization.
+
+NODE locations
+SQL >
+	%
+	SELECT
+		latitude,
+		longitude,
+		any(city) as city,
+		any(country_code) as country_code,
+		uniq(entity_id) as entity_count
+	FROM presence_latest FINAL
+	WHERE website_id = {{ String(website_id) }}
+		AND timestamp > now() - INTERVAL {{ Int32(minutes, 5) }} MINUTE
+		AND latitude != 0
+		AND longitude != 0
+	GROUP BY latitude, longitude
+	ORDER BY entity_count DESC
+
+TYPE endpoint

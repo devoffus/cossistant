@@ -1,0 +1,19 @@
+DESCRIPTION >
+	Materialized view target: latest presence per entity. ReplacingMergeTree deduplicates to 1 row per entity.
+
+SCHEMA >
+	`timestamp` DateTime,
+	`website_id` String,
+	`entity_id` String,
+	`entity_type` LowCardinality(String),
+	`name` String DEFAULT '',
+	`image` String DEFAULT '',
+	`country_code` LowCardinality(String) DEFAULT '',
+	`city` LowCardinality(String) DEFAULT '',
+	`latitude` Float32 DEFAULT 0,
+	`longitude` Float32 DEFAULT 0
+
+ENGINE "ReplacingMergeTree"
+ENGINE_SORTING_KEY "website_id, entity_type, entity_id"
+ENGINE_VER "timestamp"
+ENGINE_TTL "timestamp + toIntervalDay(7)"

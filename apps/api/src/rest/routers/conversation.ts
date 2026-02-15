@@ -20,11 +20,7 @@ import {
 	emitConversationSeenEvent,
 	emitConversationTypingEvent,
 } from "@api/utils/conversation-realtime";
-import {
-	extractDeviceFromVisitor,
-	extractGeoFromVisitor,
-	getSessionId,
-} from "@api/utils/geo-helpers";
+import { extractGeoFromVisitor } from "@api/utils/geo-helpers";
 import {
 	addConversationParticipants,
 	getDefaultParticipants,
@@ -877,9 +873,7 @@ conversationRouter.openapi(
 			websiteId: website.id,
 			visitorId: visitor.id,
 			lastSeenAt: sentAt,
-			sessionId: getSessionId(visitor),
 			geo: extractGeoFromVisitor(visitor),
-			device: extractDeviceFromVisitor(visitor),
 		});
 
 		const response = {

@@ -1,0 +1,20 @@
+DESCRIPTION >
+	Materialized pipe: feeds presence_latest from presence_events at ingest time.
+
+NODE materialize
+SQL >
+	SELECT
+		timestamp,
+		website_id,
+		entity_id,
+		entity_type,
+		name,
+		image,
+		country_code,
+		city,
+		latitude,
+		longitude
+	FROM presence_events
+
+TYPE materialized
+DATASOURCE presence_latest

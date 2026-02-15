@@ -13,11 +13,15 @@ import {
 	updateWebsite,
 } from "@api/db/queries/website";
 import {
+	conversation,
+	feedback,
 	member,
 	session as sessionTable,
 	type WebsiteInsert,
 	website,
 } from "@api/db/schema";
+import { env } from "@api/env";
+import { generateTinybirdJWT } from "@api/lib/tinybird-jwt";
 import { isOrganizationAdminOrOwner } from "@api/utils/access-control";
 import { invalidateApiKeyCacheForWebsite } from "@api/utils/cache/api-key-cache";
 import { generateULID } from "@api/utils/db/ids";
@@ -38,7 +42,7 @@ import {
 	websiteSummarySchema,
 } from "@cossistant/types";
 import { TRPCError } from "@trpc/server";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 
@@ -50,6 +54,12 @@ type ApiKeyLike =
 	| ApiKeyRecord
 	| Awaited<ReturnType<typeof createApiKey>>
 	| NonNullable<Awaited<ReturnType<typeof revokeApiKey>>>;
+
+const toNumberOrNull = (value: unknown): number | null => {
+	if (value === null || value === undefined) return null;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : null;
+};
 
 const toWebsiteApiKey = (
 	key: ApiKeyLike,
@@ -420,6 +430,110 @@ export const websiteRouter = createTRPCRouter({
 
 			return !!existingWebsite;
 		}),
+	getTinybirdToken: protectedProcedure
+		.input(z.object({ websiteSlug: z.string() }))
+		.query(async ({ ctx: { db, user }, input }) => {
+			const websiteData = await getWebsiteBySlugWithAccess(db, {
+				userId: user.id,
+				websiteSlug: input.websiteSlug,
+			});
+
+			if (!websiteData) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Website not found or access denied",
+				});
+			}
+
+			const token = await generateTinybirdJWT(websiteData.id);
+
+			return {
+				token,
+				host: env.TINYBIRD_HOST,
+				expiresAt: Date.now() + 600_000,
+				maxRetentionDays: 21, // TODO: check subscription tier
+			};
+		}),
+
+	getSatisfactionSignals: protectedProcedure
+		.input(
+			z.object({
+				websiteSlug: z.string(),
+				dateFrom: z.string(),
+				dateTo: z.string(),
+			})
+		)
+		.query(async ({ ctx: { db, user }, input }) => {
+			const websiteData = await getWebsiteBySlugWithAccess(db, {
+				userId: user.id,
+				websiteSlug: input.websiteSlug,
+			});
+
+			if (!websiteData) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Website not found or access denied",
+				});
+			}
+
+			const [ratingResult, sentimentResult] = await Promise.all([
+				db
+					.select({
+						average: sql<
+							number | null
+						>`AVG(((${feedback.rating} - 1) / 4.0) * 100)`,
+						count: sql<number>`COUNT(*)`,
+					})
+					.from(feedback)
+					.where(
+						and(
+							eq(feedback.organizationId, websiteData.organizationId),
+							eq(feedback.websiteId, websiteData.id),
+							isNull(feedback.deletedAt),
+							gte(feedback.createdAt, input.dateFrom),
+							lt(feedback.createdAt, input.dateTo)
+						)
+					),
+
+				db
+					.select({
+						average: sql<number | null>`
+							AVG(
+								50 + (
+									CASE
+										WHEN ${conversation.sentiment} = 'positive' THEN 50
+										WHEN ${conversation.sentiment} = 'negative' THEN -50
+										ELSE 0
+									END
+								) * COALESCE(${conversation.sentimentConfidence}, 1)
+							)
+						`,
+						count: sql<number>`COUNT(*)`,
+					})
+					.from(conversation)
+					.where(
+						and(
+							eq(conversation.organizationId, websiteData.organizationId),
+							eq(conversation.websiteId, websiteData.id),
+							isNull(conversation.deletedAt),
+							isNotNull(conversation.sentiment),
+							gte(conversation.startedAt, input.dateFrom),
+							lt(conversation.startedAt, input.dateTo)
+						)
+					),
+			]);
+
+			const ratingCount = Number(ratingResult[0]?.count ?? 0);
+			const ratingScore =
+				ratingCount > 0 ? toNumberOrNull(ratingResult[0]?.average) : null;
+
+			const sentimentCount = Number(sentimentResult[0]?.count ?? 0);
+			const sentimentScore =
+				sentimentCount > 0 ? toNumberOrNull(sentimentResult[0]?.average) : null;
+
+			return { ratingScore, sentimentScore };
+		}),
+
 	update: protectedProcedure
 		.input(updateWebsiteRequestSchema)
 		.output(websiteSummarySchema)

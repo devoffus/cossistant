@@ -1,5 +1,6 @@
 import type { SenderType } from "./enums";
 
+export * from "./analytics";
 export * from "./api";
 export * from "./api/ai-agent-capabilities";
 export * from "./enums";
