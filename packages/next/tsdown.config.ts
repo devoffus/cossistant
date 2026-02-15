@@ -11,17 +11,10 @@ export default defineConfig({
 		"!src/**/*.css",
 	],
 	clean: true,
-	dts: {
-		// Don't resolve/bundle types - keep @cossistant/* imports external
-		// The react package already bundles its types, consumers get types from there
-		// Note: MISSING_EXPORT warnings during build are expected and harmless -
-		// they occur because the dts bundler can't resolve type-only exports from
-		// TypeScript-generated .d.ts files in workspace packages
-		resolve: false,
-	},
+	dts: true,
 	hash: false,
-	minify: false,
-	sourcemap: true,
+	minify: true,
+	sourcemap: false,
 	treeshake: true,
 	unbundle: true,
 	outExtensions: () => ({
@@ -35,5 +28,6 @@ export default defineConfig({
 		"next",
 		"react",
 		"react-dom",
+		"react/jsx-runtime",
 	],
 });

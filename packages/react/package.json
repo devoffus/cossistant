@@ -104,7 +104,7 @@
     "directory": "dist"
   },
   "scripts": {
-    "build": "tsdown && bun run build:css && bun run prepare-package",
+    "build": "tsdown && rm -rf dist/node_modules dist/packages && find dist -name '*.map' -delete && bun run build:css && bun run prepare-package",
     "build:css": "bunx @tailwindcss/cli -i src/support/support.css -o dist/styles.css --content 'src/**/*.{js,ts,jsx,tsx}' --minify && mkdir -p dist/support && cp src/support.css dist/support.css && cp src/support/support.css dist/support/support.css && cp src/support/animations.css dist/support/animations.css",
     "prepare-package": "bun ../../scripts/prepare-package.ts",
     "pub:release": "bun run build && npm publish --access public",

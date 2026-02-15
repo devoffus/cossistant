@@ -11,13 +11,10 @@ export default defineConfig({
 		"!src/**/*.css",
 	],
 	clean: true,
-	dts: {
-		// Resolve and bundle all type dependencies to avoid exposing third-party .d.cts files
-		resolve: true,
-	},
+	dts: true,
 	hash: false,
-	minify: false,
-	sourcemap: true,
+	minify: true,
+	sourcemap: false,
 	treeshake: true,
 	unbundle: true,
 	outExtensions: () => ({
@@ -27,8 +24,16 @@ export default defineConfig({
 	external: [
 		"react",
 		"react-dom",
-		"motion",
+		"react/jsx-runtime",
 		"@cossistant/core",
 		"@cossistant/types",
+		"@cossistant/tiny-markdown",
+		"facehash",
+		"@floating-ui/react",
+		"class-variance-authority",
+		"clsx",
+		"nanoid",
+		"tailwind-merge",
+		"ulid",
 	],
 });

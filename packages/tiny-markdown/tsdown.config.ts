@@ -9,12 +9,10 @@ export default defineConfig({
 		"!src/**/*.test.tsx",
 	],
 	clean: true,
-	dts: {
-		resolve: true,
-	},
+	dts: true,
 	hash: false,
-	minify: false,
-	sourcemap: true,
+	minify: true,
+	sourcemap: false,
 	treeshake: true,
 	unbundle: true,
 	outExtensions: () => ({

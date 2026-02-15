@@ -85,7 +85,7 @@
     ]
   },
   "scripts": {
-    "build": "tsdown && bun run build:css && bun run prepare-package",
+    "build": "tsdown && rm -rf dist/node_modules dist/packages && find dist -name '*.map' -delete && bun run build:css && bun run prepare-package",
     "build:css": "mkdir -p dist && cp src/support.css dist/support.css && cp src/styles.css dist/styles.css",
     "pub:release": "bun run build && npm publish --access public",
     "pub:beta": "bun run build && npm publish --access public --tag beta --no-git-checks",
