@@ -26,7 +26,6 @@ export function detectFramework(): Framework {
 
 	// Vite — import.meta.env.MODE is always set by Vite
 	try {
-		// @ts-expect-error - import.meta.env is Vite-specific
 		if (import.meta.env?.MODE) {
 			return "vite";
 		}
@@ -88,7 +87,6 @@ export function resolvePublicKey(explicit?: string | null): string | undefined {
 	// Try import.meta.env (Vite)
 	// import.meta.env is a runtime object in Vite containing all VITE_* env vars
 	try {
-		// @ts-expect-error - import.meta.env is Vite-specific and not in standard TS types
 		const key = import.meta.env?.VITE_COSSISTANT_API_KEY;
 		const normalized = key?.trim();
 		if (normalized) {

@@ -9,7 +9,7 @@ SCHEMA >
 	`visitor_id` String `json:$.visitor_id`,
 	`event_type` LowCardinality(String) `json:$.event_type`,
 	`conversation_id` String `json:$.conversation_id`,
-	`duration_seconds` Float32 `json:$.duration_seconds`
+	`duration_seconds` Float32 `json:$.duration_seconds` DEFAULT 0
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toYYYYMM(timestamp)"

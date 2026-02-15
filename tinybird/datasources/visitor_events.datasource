@@ -10,8 +10,8 @@ SCHEMA >
 	`event_type` LowCardinality(String) `json:$.event_type`,
 	`country_code` LowCardinality(String) `json:$.country_code`,
 	`city` LowCardinality(String) `json:$.city`,
-	`latitude` Float32 `json:$.latitude`,
-	`longitude` Float32 `json:$.longitude`,
+	`latitude` Float32 `json:$.latitude` DEFAULT 0,
+	`longitude` Float32 `json:$.longitude` DEFAULT 0,
 	`device_type` LowCardinality(String) `json:$.device_type`,
 	`browser` LowCardinality(String) `json:$.browser`,
 	`page_url` String `json:$.page_url`

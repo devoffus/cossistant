@@ -12,6 +12,7 @@ import {
 	conversation,
 	conversationTimelineItem,
 } from "@api/db/schema/conversation";
+import { trackConversationMetric } from "@api/lib/tinybird-sdk";
 import { realtime } from "@api/realtime/emitter";
 import { createParticipantRequestedEvent } from "@api/utils/conversation-events";
 import { generateShortPrimaryId } from "@api/utils/db/ids";
@@ -70,6 +71,14 @@ export async function escalate(params: EscalateParams): Promise<void> {
 			escalationReason: reason,
 		})
 		.where(eq(conversation.id, conv.id));
+
+	// Track escalation metric
+	trackConversationMetric({
+		website_id: websiteId,
+		visitor_id: conv.visitorId,
+		conversation_id: conv.id,
+		event_type: "escalated",
+	});
 
 	// Create public message to visitor if provided (may already be sent via tool)
 	if (visitorMessage) {

@@ -13,6 +13,7 @@ import {
 	conversation,
 	type conversationTimelineItem,
 } from "@api/db/schema/conversation";
+import { trackConversationMetric } from "@api/lib/tinybird-sdk";
 import { markVisitorPresence } from "@api/services/presence";
 import {
 	emitConversationCreatedEvent,
@@ -1056,6 +1057,14 @@ conversationRouter.openapi(
 			comment: body.comment,
 			trigger: "conversation_resolved",
 			source: "widget",
+		});
+
+		// Track feedback metric
+		trackConversationMetric({
+			website_id: website.id,
+			visitor_id: visitor.id,
+			conversation_id: conversationRecord.id,
+			event_type: "feedback_submitted",
 		});
 
 		const response = {

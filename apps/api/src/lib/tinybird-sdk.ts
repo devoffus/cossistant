@@ -21,13 +21,13 @@ export type VisitorEvent = {
 	visitor_id: string;
 	session_id: string;
 	event_type: "seen" | "page_view";
-	country_code?: string;
-	city?: string;
-	latitude?: number;
-	longitude?: number;
-	device_type?: string;
-	browser?: string;
-	page_url?: string;
+	country_code: string;
+	city: string;
+	latitude: number;
+	longitude: number;
+	device_type: string;
+	browser: string;
+	page_url: string;
 };
 
 export type ConversationMetricEvent = {
@@ -42,7 +42,7 @@ export type ConversationMetricEvent = {
 		| "escalated"
 		| "feedback_submitted";
 	conversation_id: string;
-	duration_seconds?: number;
+	duration_seconds: number;
 };
 
 type TinybirdEvent = VisitorEvent | ConversationMetricEvent;
@@ -244,11 +244,36 @@ const conversationMetricBuffer = new EventBuffer<ConversationMetricEvent>(
  * Events are batched and flushed every 5 seconds or when 100 events are buffered.
  */
 export function trackVisitorEvent(
-	event: Omit<VisitorEvent, "timestamp">
+	event: Omit<
+		VisitorEvent,
+		| "timestamp"
+		| "latitude"
+		| "longitude"
+		| "country_code"
+		| "city"
+		| "device_type"
+		| "browser"
+		| "page_url"
+	> & {
+		country_code?: string;
+		city?: string;
+		latitude?: number;
+		longitude?: number;
+		device_type?: string;
+		browser?: string;
+		page_url?: string;
+	}
 ): void {
 	visitorEventBuffer.add({
 		...event,
 		timestamp: new Date(),
+		latitude: event.latitude ?? 0,
+		longitude: event.longitude ?? 0,
+		country_code: event.country_code ?? "",
+		city: event.city ?? "",
+		device_type: event.device_type ?? "",
+		browser: event.browser ?? "",
+		page_url: event.page_url ?? "",
 	});
 }
 
@@ -257,11 +282,14 @@ export function trackVisitorEvent(
  * Events are batched and flushed every 5 seconds or when 100 events are buffered.
  */
 export function trackConversationMetric(
-	event: Omit<ConversationMetricEvent, "timestamp">
+	event: Omit<ConversationMetricEvent, "timestamp" | "duration_seconds"> & {
+		duration_seconds?: number;
+	}
 ): void {
 	conversationMetricBuffer.add({
 		...event,
 		timestamp: new Date(),
+		duration_seconds: event.duration_seconds ?? 0,
 	});
 }
 
