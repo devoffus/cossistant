@@ -2,9 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, MailPlusIcon } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { UpgradeModal } from "@/components/plan/upgrade-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { getTeamSeatCopy } from "@/lib/team/seat-copy";
 import { useTRPC } from "@/lib/trpc/client";
 import { cn } from "@/lib/utils";
 
@@ -91,11 +92,17 @@ export function TeamInviteModal({
 	const [emailsInput, setEmailsInput] = useState("");
 	const [role, setRole] = useState<InviteRole>("member");
 	const [results, setResults] = useState<InviteResult[]>([]);
+	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
 	const parsedEmails = useMemo(() => parseEmails(emailsInput), [emailsInput]);
 
 	const { data: teamSettings } = useQuery(
 		trpc.team.getSettings.queryOptions({ websiteSlug })
+	);
+	const planInfoQuery = useQuery(
+		trpc.plan.getPlanInfo.queryOptions({
+			websiteSlug,
+		})
 	);
 
 	const { mutateAsync: inviteMany, isPending } = useMutation(
@@ -132,6 +139,16 @@ export function TeamInviteModal({
 		typeof teamSettings?.seats.remaining === "number" &&
 		teamSettings.seats.remaining <= 0;
 	const canManageTeam = teamSettings?.canManageTeam ?? false;
+	const seatCopy = getTeamSeatCopy({
+		used: teamSettings?.seats.used ?? 0,
+		limit: teamSettings?.seats.limit ?? null,
+		reserved: teamSettings?.seats.reserved ?? 0,
+	});
+	const canOpenUpgradeModal = Boolean(
+		planInfoQuery.data && !planInfoQuery.isPending
+	);
+	const initialUpgradePlanName =
+		planInfoQuery.data?.plan.name === "free" ? "hobby" : "pro";
 
 	const hasPlanLimitResult = results.some(
 		(result) => result.status === "plan-limit"
@@ -206,30 +223,24 @@ export function TeamInviteModal({
 						</Select>
 					</div>
 
-					<div className="rounded border border-primary/10 bg-background-100 px-3 py-2 text-xs">
-						<span className="font-medium">
-							Seats: {teamSettings?.seats.used ?? 0}
-						</span>
-						{" + "}
-						<span className="font-medium">
-							{teamSettings?.seats.reserved ?? 0}
-						</span>
-						{" reserved / "}
-						<span className="font-medium">
-							{teamSettings?.seats.limit === null
-								? "Unlimited"
-								: (teamSettings?.seats.limit ?? 0)}
-						</span>
+					<div className="space-y-1 text-xs">
+						<p className="font-medium">{seatCopy.primary}</p>
+						<p className="text-muted-foreground">{seatCopy.secondary}</p>
 					</div>
 
 					{atSeatLimit && (
-						<div className="rounded border border-cossistant-orange/30 bg-cossistant-orange/10 px-3 py-2 text-xs">
-							<p className="font-medium text-cossistant-orange">
+						<div className="flex items-center justify-between gap-6 text-xs">
+							<p className="text-cossistant-orange">
 								You've reached your seat limit.
 							</p>
-							<p className="mt-1 text-muted-foreground">
-								Upgrade your plan to invite more teammates.
-							</p>
+							<Button
+								disabled={!canOpenUpgradeModal}
+								onClick={() => setIsUpgradeModalOpen(true)}
+								size="sm"
+								variant="outline"
+							>
+								Upgrade
+							</Button>
 						</div>
 					)}
 
@@ -262,13 +273,18 @@ export function TeamInviteModal({
 						</div>
 					)}
 
-					{hasPlanLimitResult && (
-						<div className="flex items-center justify-between rounded border border-cossistant-orange/30 bg-cossistant-orange/10 px-3 py-2">
+					{hasPlanLimitResult && !atSeatLimit && (
+						<div className="flex items-center justify-between gap-3">
 							<p className="text-cossistant-orange text-xs">
 								Some invites were blocked by your plan limit.
 							</p>
-							<Button asChild size="sm" variant="outline">
-								<Link href={`/${websiteSlug}/settings/plan`}>Upgrade</Link>
+							<Button
+								disabled={!canOpenUpgradeModal}
+								onClick={() => setIsUpgradeModalOpen(true)}
+								size="sm"
+								variant="outline"
+							>
+								Upgrade
 							</Button>
 						</div>
 					)}
@@ -297,6 +313,17 @@ export function TeamInviteModal({
 					</Button>
 				</DialogFooter>
 			</DialogContent>
+
+			{planInfoQuery.data && (
+				<UpgradeModal
+					currentPlan={planInfoQuery.data.plan}
+					highlightedFeatureKey="team-members"
+					initialPlanName={initialUpgradePlanName}
+					onOpenChange={setIsUpgradeModalOpen}
+					open={isUpgradeModalOpen}
+					websiteSlug={websiteSlug}
+				/>
+			)}
 		</Dialog>
 	);
 }

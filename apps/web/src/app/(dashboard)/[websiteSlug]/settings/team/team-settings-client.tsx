@@ -9,11 +9,10 @@ import {
 	MoreHorizontalIcon,
 	RefreshCwIcon,
 	Trash2Icon,
-	UserPlusIcon,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { UpgradeModal } from "@/components/plan/upgrade-modal";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +32,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useInviteTeamModal } from "@/hooks/use-invite-team-modal";
+import { getTeamSeatCopy } from "@/lib/team/seat-copy";
 import { useTRPC } from "@/lib/trpc/client";
 
 type TeamSettings = RouterOutputs["team"]["getSettings"];
@@ -131,9 +131,15 @@ export function TeamSettingsClient({
 		useState<TeamMember | null>(null);
 	const [pendingCancelInvitation, setPendingCancelInvitation] =
 		useState<TeamInvitation | null>(null);
+	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
 	const settingsQuery = useQuery(
 		trpc.team.getSettings.queryOptions({
+			websiteSlug,
+		})
+	);
+	const planInfoQuery = useQuery(
+		trpc.plan.getPlanInfo.queryOptions({
 			websiteSlug,
 		})
 	);
@@ -316,209 +322,137 @@ export function TeamSettingsClient({
 	const settings = settingsQuery.data;
 	const atSeatLimit =
 		settings.seats.remaining !== null && settings.seats.remaining <= 0;
+	const seatCopy = getTeamSeatCopy({
+		used: settings.seats.used,
+		limit: settings.seats.limit,
+		reserved: settings.seats.reserved,
+	});
+	const canOpenUpgradeModal = Boolean(
+		planInfoQuery.data && !planInfoQuery.isPending
+	);
+	const initialUpgradePlanName =
+		planInfoQuery.data?.plan.name === "free" ? "hobby" : "pro";
 
 	return (
-		<div className="space-y-4">
-			<div className="flex flex-wrap items-center justify-between gap-3 border-primary/10 border-b p-4">
-				<div className="space-y-1">
-					<p className="font-medium text-sm">
-						Seats: {settings.seats.used} + {settings.seats.reserved} reserved /{" "}
-						{settings.seats.limit ?? "Unlimited"}
-					</p>
+		<>
+			<div className="space-y-8 p-4">
+				<section className="space-y-3">
+					<div className="flex flex-wrap items-start justify-between gap-3">
+						<div className="space-y-1">
+							<p className="font-medium text-sm">{seatCopy.primary}</p>
+							<p className="text-muted-foreground text-xs">
+								{seatCopy.secondary}
+							</p>
+						</div>
+
+						{settings.canManageTeam &&
+							(atSeatLimit ? (
+								<div className="flex flex-wrap items-center gap-2">
+									<p className="text-cossistant-orange text-xs">
+										You&apos;ve reached your seat limit.
+									</p>
+									<Button
+										disabled={!canOpenUpgradeModal}
+										onClick={() => setIsUpgradeModalOpen(true)}
+										size="sm"
+										variant="outline"
+									>
+										Upgrade
+									</Button>
+								</div>
+							) : (
+								<Button onClick={() => void openInviteTeamModal()} size="sm">
+									Invite
+								</Button>
+							))}
+					</div>
+
 					<p className="text-muted-foreground text-xs">
 						Current plan limits how many people can access this website.
 					</p>
-				</div>
-				<div className="flex items-center gap-2">
-					{settings.canManageTeam && (
-						<Button onClick={() => void openInviteTeamModal()} size="sm">
-							<UserPlusIcon className="size-4" />
-							Invite members
-						</Button>
-					)}
-				</div>
-			</div>
+				</section>
 
-			{atSeatLimit && (
-				<div className="mx-4 flex flex-wrap items-center justify-between gap-3 rounded border border-cossistant-orange/30 bg-cossistant-orange/10 px-3 py-2">
-					<p className="text-cossistant-orange text-xs">
-						You've reached your seat limit. Upgrade to add more teammates.
-					</p>
-					<Button asChild size="sm" variant="outline">
-						<Link href={`/${websiteSlug}/settings/plan`}>Upgrade plan</Link>
-					</Button>
-				</div>
-			)}
+				<section className="space-y-3 border-primary/10 border-t pt-6">
+					<div className="space-y-1">
+						<p className="font-medium text-sm">
+							Members with access [{settings.members.length}]
+						</p>
+					</div>
 
-			<div className="mx-4 overflow-hidden rounded border border-primary/10">
-				<div className="border-primary/10 border-b px-3 py-2">
-					<p className="font-medium text-sm">Members with access</p>
-				</div>
-				<div className="divide-y divide-primary/10">
-					{settings.members.map((member) => {
-						const normalizedRole = normalizeRole(member.role);
-						const isSelf = member.userId === currentUserId;
-						const canManageThisMember =
-							settings.canManageTeam &&
-							Boolean(member.memberId) &&
-							!isSelf &&
-							normalizedRole !== "owner";
-						const isUpdating = member.memberId === updatingRoleMemberId;
-						const isRemoving = member.memberId === removingMemberId;
-
-						return (
-							<div
-								className="group flex items-center gap-3 px-2 py-2 text-sm"
-								key={member.userId}
-							>
-								<Avatar
-									className="size-8"
-									fallbackName={member.name ?? member.email}
-									lastOnlineAt={member.lastSeenAt}
-									url={member.image}
-								/>
-
-								<div className="min-w-0 flex-1">
-									<div className="flex items-center gap-2">
-										<p className="truncate font-medium">
-											{member.name ?? member.email.split("@")[0]}
-										</p>
-										{isSelf && <Badge variant="secondary">You</Badge>}
-										{member.accessSource !== "team" && (
-											<Badge variant="secondary">Org-wide access</Badge>
-										)}
-									</div>
-									<p className="truncate text-muted-foreground text-xs">
-										{member.email}
-									</p>
-								</div>
-
-								<div className="flex items-center gap-2">
-									<Badge
-										variant={
-											normalizedRole === "member" ? "secondary" : "default"
-										}
-									>
-										{roleLabel(normalizedRole)}
-									</Badge>
-
-									{canManageThisMember && (
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button size="icon-small" variant="ghost">
-													<MoreHorizontalIcon className="size-4" />
-													<span className="sr-only">Member actions</span>
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end">
-												<DropdownMenuItem
-													disabled={isUpdating || normalizedRole === "admin"}
-													onSelect={() =>
-														void handleRoleChange(member, "admin")
-													}
-												>
-													Make admin
-												</DropdownMenuItem>
-												<DropdownMenuItem
-													disabled={isUpdating || normalizedRole === "member"}
-													onSelect={() =>
-														void handleRoleChange(member, "member")
-													}
-												>
-													Make member
-												</DropdownMenuItem>
-												<DropdownMenuSeparator />
-												<DropdownMenuItem
-													disabled={isRemoving}
-													onSelect={() => void handleRemoveMember(member)}
-													variant="destructive"
-												>
-													<Trash2Icon className="size-4" />
-													Remove access
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
-									)}
-								</div>
-							</div>
-						);
-					})}
-				</div>
-			</div>
-
-			<div className="mx-4 overflow-hidden rounded border border-primary/10">
-				<div className="border-primary/10 border-b px-3 py-2">
-					<p className="font-medium text-sm">Invitations</p>
-				</div>
-				{settings.invitations.length === 0 ? (
-					<p className="p-4 text-muted-foreground text-sm">
-						No invitations yet.
-					</p>
-				) : (
-					<div className="max-h-80 divide-y divide-primary/10 overflow-y-auto">
-						{settings.invitations.map((invitation) => {
-							const expiresAt = new Date(invitation.expiresAt);
-							const isPending =
-								invitation.status === "pending" && !invitation.isExpired;
-							const isResending = resendingInvitationId === invitation.id;
-							const isCanceling = cancelingInvitationId === invitation.id;
+					<div className="divide-y divide-primary/10">
+						{settings.members.map((member) => {
+							const normalizedRole = normalizeRole(member.role);
+							const isSelf = member.userId === currentUserId;
+							const canManageThisMember =
+								settings.canManageTeam &&
+								Boolean(member.memberId) &&
+								!isSelf &&
+								normalizedRole !== "owner";
+							const isUpdating = member.memberId === updatingRoleMemberId;
+							const isRemoving = member.memberId === removingMemberId;
 
 							return (
 								<div
-									className="group flex items-center gap-3 px-2 py-2 text-sm"
-									key={invitation.id}
+									className="group flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0"
+									key={member.userId}
 								>
-									<div className="flex size-8 items-center justify-center rounded border border-primary/10 bg-background-100">
-										<MailIcon className="size-4 text-muted-foreground" />
-									</div>
+									<Avatar
+										className="size-8"
+										fallbackName={member.name ?? member.email}
+										lastOnlineAt={member.lastSeenAt}
+										url={member.image}
+									/>
 
 									<div className="min-w-0 flex-1">
-										<p className="truncate font-medium">{invitation.email}</p>
+										<div className="flex items-center gap-2">
+											<p className="truncate font-medium">
+												{member.name ?? member.email.split("@")[0]}
+											</p>
+											{isSelf && <Badge variant="secondary">You</Badge>}
+										</div>
 										<p className="truncate text-muted-foreground text-xs">
-											{invitation.inviterName
-												? `Invited by ${invitation.inviterName}`
-												: "Invitation sent"}{" "}
-											•{" "}
-											{invitation.isExpired
-												? `Expired ${formatDistanceToNow(expiresAt, {
-														addSuffix: true,
-													})}`
-												: `Expires ${formatDistanceToNow(expiresAt, {
-														addSuffix: true,
-													})}`}
+											{member.email}
 										</p>
 									</div>
 
 									<div className="flex items-center gap-2">
-										<Badge variant={invitationStatusVariant(invitation)}>
-											{invitationStatusLabel(invitation)}
-										</Badge>
+										<span className="font-medium text-muted-foreground text-xs">
+											{roleLabel(normalizedRole)}
+										</span>
 
-										{settings.canManageTeam && isPending && (
+										{canManageThisMember && (
 											<DropdownMenu>
 												<DropdownMenuTrigger asChild>
 													<Button size="icon-small" variant="ghost">
 														<MoreHorizontalIcon className="size-4" />
-														<span className="sr-only">Invitation actions</span>
+														<span className="sr-only">Member actions</span>
 													</Button>
 												</DropdownMenuTrigger>
 												<DropdownMenuContent align="end">
 													<DropdownMenuItem
-														disabled={isResending}
+														disabled={isUpdating || normalizedRole === "admin"}
 														onSelect={() =>
-															void handleResendInvitation(invitation.id)
+															void handleRoleChange(member, "admin")
 														}
 													>
-														<RefreshCwIcon className="size-4" />
-														Resend invitation
+														Make admin
 													</DropdownMenuItem>
 													<DropdownMenuItem
-														disabled={isCanceling}
-														onSelect={() => handleCancelInvitation(invitation)}
+														disabled={isUpdating || normalizedRole === "member"}
+														onSelect={() =>
+															void handleRoleChange(member, "member")
+														}
+													>
+														Make member
+													</DropdownMenuItem>
+													<DropdownMenuSeparator />
+													<DropdownMenuItem
+														disabled={isRemoving}
+														onSelect={() => void handleRemoveMember(member)}
 														variant="destructive"
 													>
 														<Trash2Icon className="size-4" />
-														Cancel invitation
+														Remove access
 													</DropdownMenuItem>
 												</DropdownMenuContent>
 											</DropdownMenu>
@@ -528,8 +462,108 @@ export function TeamSettingsClient({
 							);
 						})}
 					</div>
-				)}
+				</section>
+
+				<section className="space-y-3 border-primary/10 border-t pt-6">
+					<div className="space-y-1">
+						<p className="font-medium text-sm">
+							Invitations [{settings.invitations.length}]
+						</p>
+					</div>
+					{settings.invitations.length === 0 ? (
+						<p className="text-muted-foreground text-sm">No invitations yet.</p>
+					) : (
+						<div className="max-h-80 divide-y divide-primary/10 overflow-y-auto pr-1">
+							{settings.invitations.map((invitation) => {
+								const expiresAt = new Date(invitation.expiresAt);
+								const isPending =
+									invitation.status === "pending" && !invitation.isExpired;
+								const isResending = resendingInvitationId === invitation.id;
+								const isCanceling = cancelingInvitationId === invitation.id;
+
+								return (
+									<div
+										className="group flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0"
+										key={invitation.id}
+									>
+										<div className="flex size-8 items-center justify-center rounded border border-primary/10 bg-background-100">
+											<MailIcon className="size-4 text-muted-foreground" />
+										</div>
+
+										<div className="min-w-0 flex-1">
+											<p className="truncate font-medium">{invitation.email}</p>
+											<p className="truncate text-muted-foreground text-xs">
+												{invitation.inviterName
+													? `Invited by ${invitation.inviterName}`
+													: "Invitation sent"}{" "}
+												•{" "}
+												{invitation.isExpired
+													? `Expired ${formatDistanceToNow(expiresAt, {
+															addSuffix: true,
+														})}`
+													: `Expires ${formatDistanceToNow(expiresAt, {
+															addSuffix: true,
+														})}`}
+											</p>
+										</div>
+
+										<div className="flex items-center gap-2">
+											<Badge variant={invitationStatusVariant(invitation)}>
+												{invitationStatusLabel(invitation)}
+											</Badge>
+
+											{settings.canManageTeam && isPending && (
+												<DropdownMenu>
+													<DropdownMenuTrigger asChild>
+														<Button size="icon-small" variant="ghost">
+															<MoreHorizontalIcon className="size-4" />
+															<span className="sr-only">
+																Invitation actions
+															</span>
+														</Button>
+													</DropdownMenuTrigger>
+													<DropdownMenuContent align="end">
+														<DropdownMenuItem
+															disabled={isResending}
+															onSelect={() =>
+																void handleResendInvitation(invitation.id)
+															}
+														>
+															<RefreshCwIcon className="size-4" />
+															Resend invitation
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															disabled={isCanceling}
+															onSelect={() =>
+																handleCancelInvitation(invitation)
+															}
+															variant="destructive"
+														>
+															<Trash2Icon className="size-4" />
+															Cancel invitation
+														</DropdownMenuItem>
+													</DropdownMenuContent>
+												</DropdownMenu>
+											)}
+										</div>
+									</div>
+								);
+							})}
+						</div>
+					)}
+				</section>
 			</div>
+
+			{planInfoQuery.data && (
+				<UpgradeModal
+					currentPlan={planInfoQuery.data.plan}
+					highlightedFeatureKey="team-members"
+					initialPlanName={initialUpgradePlanName}
+					onOpenChange={setIsUpgradeModalOpen}
+					open={isUpgradeModalOpen}
+					websiteSlug={websiteSlug}
+				/>
+			)}
 
 			<Dialog
 				onOpenChange={(open) => {
@@ -606,6 +640,6 @@ export function TeamSettingsClient({
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
-		</div>
+		</>
 	);
 }
