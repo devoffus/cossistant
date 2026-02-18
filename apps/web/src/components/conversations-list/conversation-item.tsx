@@ -31,6 +31,7 @@ import { getVisitorNameWithFallback } from "@/lib/visitors";
 import { ConversationBasicActions } from "../conversation/actions/basic";
 import { BouncingDots } from "../conversation/messages/typing-indicator";
 import { Logo } from "../ui/logo";
+import { LockedConversationPreview } from "./locked-conversation-preview";
 
 type ConversationItemViewProps = {
 	visitorName: string;
@@ -40,6 +41,7 @@ type ConversationItemViewProps = {
 	title?: string | null;
 	lastTimelineContent: ReactNode;
 	lastTimelineItemCreatedAt?: Date | null;
+	timeDisplayOverrideAt?: Date | null;
 	isTyping: boolean;
 	isAITyping?: boolean;
 	isLastMessageFromAI?: boolean;
@@ -50,7 +52,9 @@ type ConversationItemViewProps = {
 	rightContent?: ReactNode;
 	className?: string;
 	onMouseEnter?: () => void;
+	onClick?: () => void;
 	href?: string;
+	locked?: boolean;
 };
 
 export function ConversationItemView({
@@ -61,6 +65,7 @@ export function ConversationItemView({
 	title,
 	lastTimelineContent,
 	lastTimelineItemCreatedAt,
+	timeDisplayOverrideAt,
 	isTyping,
 	isAITyping = false,
 	isLastMessageFromAI = false,
@@ -71,20 +76,26 @@ export function ConversationItemView({
 	rightContent,
 	className,
 	onMouseEnter,
+	onClick,
 	href,
+	locked = false,
 }: ConversationItemViewProps) {
 	const [isMounted, setIsMounted] = useState(false);
 	const [formattedTime, setFormattedTime] = useState<string | null>(null);
 
 	useEffect(() => {
 		setIsMounted(true);
-		if (lastTimelineItemCreatedAt) {
-			setFormattedTime(formatTimeAgo(lastTimelineItemCreatedAt));
+		const timestampToDisplay =
+			timeDisplayOverrideAt ?? lastTimelineItemCreatedAt;
+		if (timestampToDisplay) {
+			setFormattedTime(formatTimeAgo(timestampToDisplay));
+			return;
 		}
-	}, [lastTimelineItemCreatedAt]);
+		setFormattedTime(null);
+	}, [lastTimelineItemCreatedAt, timeDisplayOverrideAt]);
 
 	const content = (
-		<>
+		<div className="flex w-full items-center gap-3">
 			<Avatar
 				className="size-8"
 				fallbackName={visitorName}
@@ -123,16 +134,19 @@ export function ConversationItemView({
 				</div>
 			</div>
 			<div className="flex items-center gap-3">
-				{needsHumanIntervention && (
+				{locked ? (
+					<span className="shrink-0 font-medium text-cossistant-orange text-xs leading-none">
+						locked
+					</span>
+				) : needsHumanIntervention ? (
 					<span className="shrink-0 font-medium text-cossistant-orange text-xs leading-none">
 						Needs human
 					</span>
-				)}
-				{waitingSinceLabel && !needsHumanIntervention && (
+				) : waitingSinceLabel ? (
 					<span className="shrink-0 font-medium text-cossistant-orange text-xs leading-none">
 						{waitingSinceLabel} waiting
 					</span>
-				)}
+				) : null}
 				<div className="flex min-w-[102px] items-center justify-end gap-1">
 					{rightContent ||
 						(isMounted && formattedTime ? (
@@ -149,17 +163,18 @@ export function ConversationItemView({
 					/>
 				</div>
 			</div>
-		</>
+		</div>
 	);
 
 	const baseClasses = cn(
-		"group/conversation-item relative flex items-center gap-3 rounded px-2 py-2 text-sm",
+		"group/conversation-item relative flex w-full min-w-0 items-center justify-start gap-3 rounded px-2 py-2 text-left text-sm",
+		"appearance-none border-0 bg-transparent",
 		"focus-visible:outline-none focus-visible:ring-0",
 		focused && "bg-background-200 text-primary dark:bg-background-300",
 		className
 	);
 
-	if (href) {
+	if (href && !locked) {
 		return (
 			<Link
 				className={baseClasses}
@@ -169,6 +184,19 @@ export function ConversationItemView({
 			>
 				{content}
 			</Link>
+		);
+	}
+
+	if (locked) {
+		return (
+			<button
+				className={baseClasses}
+				onClick={onClick}
+				onMouseEnter={onMouseEnter}
+				type="button"
+			>
+				{content}
+			</button>
 		);
 	}
 
@@ -191,6 +219,7 @@ type Props = {
 	setFocused?: () => void;
 	showWaitingForReplyPill?: boolean;
 	isSmartMode?: boolean;
+	onLockedActivate?: (conversationId: string) => void;
 };
 
 export function ConversationItem({
@@ -201,6 +230,7 @@ export function ConversationItem({
 	setFocused,
 	showWaitingForReplyPill = false,
 	isSmartMode = false,
+	onLockedActivate,
 }: Props) {
 	const queryNormalizer = useQueryNormalizer();
 	const {
@@ -208,6 +238,7 @@ export function ConversationItem({
 		lastTimelineItem: headerLastTimelineItem,
 		lastMessageTimelineItem: headerLastMessageTimelineItem,
 	} = header;
+	const isLocked = Boolean(header.dashboardLocked);
 	const { prefetchConversation } = usePrefetchConversationData();
 	const { user } = useUserSession();
 	const members = useWebsiteMembers();
@@ -363,6 +394,10 @@ export function ConversationItem({
 	);
 
 	const lastTimelineContent = useMemo<ReactNode>(() => {
+		if (isLocked) {
+			return <LockedConversationPreview conversationId={header.id} />;
+		}
+
 		if (!lastTimelineItem) {
 			return "";
 		}
@@ -379,7 +414,7 @@ export function ConversationItem({
 		}
 
 		return <span className="truncate">{lastTimelinePreview}</span>;
-	}, [isEventPreview, lastTimelineItem, lastTimelinePreview]);
+	}, [isEventPreview, isLocked, lastTimelineItem, lastTimelinePreview]);
 
 	const shouldDisplayWaitingPill =
 		showWaitingForReplyPill &&
@@ -427,13 +462,19 @@ export function ConversationItem({
 	const isLastMessageFromAI = Boolean(lastTimelineItem?.aiAgentId);
 
 	const hasUnreadMessage = Boolean(
-		lastTimelineItem &&
+		!isLocked &&
+			lastTimelineItem &&
 			!isLastTimelineItemFromCurrentUser &&
 			lastTimelineItemCreatedAt &&
 			(!headerLastSeenAt || lastTimelineItemCreatedAt > headerLastSeenAt)
 	);
 
 	const fullName = getVisitorNameWithFallback(visitor ?? headerVisitor);
+
+	const lockedTimeDisplayAt = useMemo(
+		() => (isLocked ? new Date(header.createdAt) : null),
+		[header.createdAt, isLocked]
+	);
 
 	// In smart mode, hide "needs human" badge since category header provides this info
 	// But show waiting time label in orange when conversation is in "long waiting" category
@@ -445,23 +486,27 @@ export function ConversationItem({
 		<ConversationItemView
 			focused={focused}
 			hasUnreadMessage={hasUnreadMessage}
-			href={href}
+			href={isLocked ? undefined : href}
 			isAITyping={isAITyping}
 			isLastMessageFromAI={isLastMessageFromAI}
 			isTyping={Boolean(typingInfo)}
 			lastTimelineContent={lastTimelineContent}
 			lastTimelineItemCreatedAt={lastTimelineItemCreatedAt}
+			locked={isLocked}
 			needsHumanIntervention={showNeedsHuman}
+			onClick={isLocked ? () => onLockedActivate?.(header.id) : undefined}
 			onMouseEnter={() => {
 				setFocused?.();
-				prefetchConversation({
-					websiteSlug,
-					conversationId: header.id,
-					visitorId: header.visitorId,
-				});
+				if (!isLocked) {
+					prefetchConversation({
+						websiteSlug,
+						conversationId: header.id,
+						visitorId: header.visitorId,
+					});
+				}
 			}}
 			rightContent={
-				focused ? (
+				focused && !isLocked ? (
 					<ConversationBasicActions
 						conversationId={header.id}
 						deletedAt={header.deletedAt}
@@ -472,6 +517,7 @@ export function ConversationItem({
 					/>
 				) : null
 			}
+			timeDisplayOverrideAt={lockedTimeDisplayAt}
 			title={header.title}
 			visitorAvatarUrl={
 				visitor?.contact?.image ?? headerVisitor?.contact?.image ?? null

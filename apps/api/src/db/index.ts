@@ -53,6 +53,10 @@ const createDb = (): NodePgDatabase<typeof schema> => {
 };
 
 export type Database = ReturnType<typeof drizzle<typeof schema>>;
+export type DatabaseTransaction = Parameters<
+	Parameters<Database["transaction"]>[0]
+>[0];
+export type DatabaseClient = Database | DatabaseTransaction;
 
 export const db = new Proxy({} as Database, {
 	get: (target, prop) => {

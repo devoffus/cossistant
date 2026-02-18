@@ -22,6 +22,14 @@ import {
 import { getCompleteVisitorWithContact } from "@api/db/queries/visitor";
 import { getWebsiteBySlugWithAccess } from "@api/db/queries/website";
 import { env } from "@api/env";
+import {
+	applyDashboardConversationHardLimit,
+	getDashboardConversationLockCutoff,
+	isDashboardConversationLocked,
+	isDashboardMessageLimitReached,
+	resolveDashboardHardLimitPolicy,
+} from "@api/lib/hard-limits/dashboard";
+import { getPlanForWebsite } from "@api/lib/plans/access";
 import { realtime } from "@api/realtime/emitter";
 import { getRedis } from "@api/redis";
 import { createParticipantJoinedEvent } from "@api/utils/conversation-events";
@@ -41,9 +49,16 @@ import {
 	visitorResponseSchema,
 } from "@cossistant/types";
 import { TRPCError } from "@trpc/server";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../init";
 import { loadConversationContext } from "../utils/conversation";
+
+const MESSAGE_LIMIT_LOCK_NAMESPACE = "dashboard-message-hard-limit";
+
+function buildMessageLimitLockKey(websiteId: string): string {
+	return `${MESSAGE_LIMIT_LOCK_NAMESPACE}:${websiteId}`;
+}
 
 function toConversationOutput(record: ConversationRecord) {
 	return {
@@ -92,17 +107,34 @@ export const conversationRouter = createTRPCRouter({
 				});
 			}
 
-			// Fetch conversations for the website
-			const result = await listConversationsHeaders(db, {
-				organizationId: websiteData.organizationId,
+			const [planInfo, result] = await Promise.all([
+				getPlanForWebsite(websiteData),
+				listConversationsHeaders(db, {
+					organizationId: websiteData.organizationId,
+					websiteId: websiteData.id,
+					userId: user.id,
+					limit: input.limit,
+					cursor: input.cursor,
+				}),
+			]);
+
+			const hardLimitPolicy = resolveDashboardHardLimitPolicy(planInfo);
+			const lockCutoff = await getDashboardConversationLockCutoff(db, {
 				websiteId: websiteData.id,
-				userId: user.id,
-				limit: input.limit,
-				cursor: input.cursor,
+				organizationId: websiteData.organizationId,
+				policy: hardLimitPolicy,
 			});
 
+			const items = result.items.map((item) =>
+				applyDashboardConversationHardLimit({
+					conversation: item,
+					cutoff: lockCutoff,
+					policy: hardLimitPolicy,
+				})
+			);
+
 			return {
-				items: result.items,
+				items,
 				nextCursor: result.nextCursor,
 			};
 		}),
@@ -139,6 +171,31 @@ export const conversationRouter = createTRPCRouter({
 				throw new TRPCError({
 					code: "NOT_FOUND",
 					message: "Conversation not found",
+				});
+			}
+
+			const planInfo = await getPlanForWebsite(websiteData);
+			const hardLimitPolicy = resolveDashboardHardLimitPolicy(planInfo);
+			const lockCutoff = await getDashboardConversationLockCutoff(db, {
+				websiteId: websiteData.id,
+				organizationId: websiteData.organizationId,
+				policy: hardLimitPolicy,
+			});
+
+			if (
+				isDashboardConversationLocked({
+					conversation: {
+						id: conversation.id,
+						createdAt: conversation.createdAt,
+					},
+					cutoff: lockCutoff,
+					policy: hardLimitPolicy,
+				})
+			) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message:
+						"Conversation locked because your conversation hard limit was reached.",
 				});
 			}
 
@@ -242,60 +299,94 @@ export const conversationRouter = createTRPCRouter({
 				});
 			}
 
-			// Check if user needs to be added as participant
-			const isParticipant = await isUserParticipant(db, {
-				conversationId: input.conversationId,
-				userId: user.id,
-			});
+			const planInfo = await getPlanForWebsite(websiteData);
+			const hardLimitPolicy = resolveDashboardHardLimitPolicy(planInfo);
 
-			if (!isParticipant) {
-				// Add user as participant
-				await addConversationParticipant(db, {
+			const sendMessageWithDb = async (dbClient: typeof db) => {
+				// Check if user needs to be added as participant
+				const isParticipant = await isUserParticipant(dbClient, {
 					conversationId: input.conversationId,
 					userId: user.id,
-					organizationId: websiteData.organizationId,
-					reason: "Sent message",
 				});
 
-				// Create participant joined event (PUBLIC so visitor sees it)
-				await createParticipantJoinedEvent(db, {
-					conversationId: input.conversationId,
+				if (!isParticipant) {
+					// Add user as participant
+					await addConversationParticipant(dbClient, {
+						conversationId: input.conversationId,
+						userId: user.id,
+						organizationId: websiteData.organizationId,
+						reason: "Sent message",
+					});
+
+					// Create participant joined event (PUBLIC so visitor sees it)
+					await createParticipantJoinedEvent(dbClient, {
+						conversationId: input.conversationId,
+						organizationId: websiteData.organizationId,
+						websiteId: websiteData.id,
+						visitorId: conversation.visitorId,
+						targetUserId: user.id,
+						isAutoAdded: true,
+					});
+				}
+
+				const { item: createdTimelineItem } = await createMessageTimelineItem({
+					db: dbClient,
 					organizationId: websiteData.organizationId,
 					websiteId: websiteData.id,
-					visitorId: conversation.visitorId,
-					targetUserId: user.id,
-					isAutoAdded: true,
+					conversationId: input.conversationId,
+					conversationOwnerVisitorId: conversation.visitorId,
+					id: input.timelineItemId,
+					text: input.text,
+					extraParts: input.parts ?? [],
+					visibility: input.visibility,
+					userId: user.id,
+					visitorId: null,
+					aiAgentId: null,
 				});
+
+				// Mark conversation as read by user after sending timeline item
+				const { lastSeenAt } = await markConversationAsRead(dbClient, {
+					conversation,
+					actorUserId: user.id,
+				});
+
+				await emitConversationSeenEvent({
+					conversation,
+					actor: { type: "user", userId: user.id },
+					lastSeenAt,
+				});
+
+				return { item: createdTimelineItem };
+			};
+
+			if (!hardLimitPolicy.enforced || hardLimitPolicy.messageLimit === null) {
+				return sendMessageWithDb(db);
 			}
 
-			const { item: createdTimelineItem } = await createMessageTimelineItem({
-				db,
-				organizationId: websiteData.organizationId,
-				websiteId: websiteData.id,
-				conversationId: input.conversationId,
-				conversationOwnerVisitorId: conversation.visitorId,
-				id: input.timelineItemId,
-				text: input.text,
-				extraParts: input.parts ?? [],
-				visibility: input.visibility,
-				userId: user.id,
-				visitorId: null,
-				aiAgentId: null,
-			});
+			return db.transaction(async (tx) => {
+				const lockKey = buildMessageLimitLockKey(websiteData.id);
+				const txDb = tx as unknown as typeof db;
 
-			// Mark conversation as read by user after sending timeline item
-			const { lastSeenAt } = await markConversationAsRead(db, {
-				conversation,
-				actorUserId: user.id,
-			});
+				await txDb.execute(
+					sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`
+				);
 
-			await emitConversationSeenEvent({
-				conversation,
-				actor: { type: "user", userId: user.id },
-				lastSeenAt,
-			});
+				const reached = await isDashboardMessageLimitReached(txDb, {
+					websiteId: websiteData.id,
+					organizationId: websiteData.organizationId,
+					policy: hardLimitPolicy,
+				});
 
-			return { item: createdTimelineItem };
+				if (reached) {
+					throw new TRPCError({
+						code: "FORBIDDEN",
+						message:
+							"Message hard limit reached for your rolling 30-day window.",
+					});
+				}
+
+				return sendMessageWithDb(txDb);
+			});
 		}),
 
 	markResolved: protectedProcedure

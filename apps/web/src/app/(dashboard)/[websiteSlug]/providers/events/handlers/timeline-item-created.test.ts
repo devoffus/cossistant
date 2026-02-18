@@ -201,4 +201,92 @@ describe("handleMessageCreated", () => {
 		expect(updateConversationHeaderInCacheMock).toHaveBeenCalledTimes(1);
 		expect(setNormalizedDataMock).toHaveBeenCalledTimes(1);
 	});
+
+	it("keeps locked headers redacted when new messages arrive", async () => {
+		const { handleMessageCreated } = await timelineItemCreatedModulePromise;
+
+		const header = {
+			id: "conv-1",
+			title: "Visible title",
+			dashboardLocked: true,
+			dashboardLockReason: "conversation_limit",
+			lastTimelineItem: null,
+			lastMessageTimelineItem: null,
+			lastMessageAt: null,
+			updatedAt: "2025-01-01T00:00:00.000Z",
+		};
+
+		const getObjectByIdMock = mock((_id: string) => header);
+		const setNormalizedDataMock = mock((_value: unknown) => {});
+
+		handleMessageCreated({
+			event: {
+				type: "timelineItemCreated",
+				payload: {
+					websiteId: "site-1",
+					organizationId: "org-1",
+					visitorId: "visitor-1",
+					userId: null,
+					conversationId: "conv-1",
+					item: {
+						id: "msg-2",
+						conversationId: "conv-1",
+						organizationId: "org-1",
+						visibility: "public",
+						type: "message",
+						text: "Should stay hidden",
+						parts: [{ type: "text", text: "Should stay hidden" }],
+						userId: null,
+						visitorId: "visitor-1",
+						aiAgentId: null,
+						createdAt: "2026-01-03T00:00:00.000Z",
+						deletedAt: null,
+						tool: null,
+					},
+				},
+			} as never,
+			context: {
+				queryClient: {
+					getQueryCache: () => ({
+						findAll: () => [
+							{
+								queryKey: [
+									["conversation", "getConversationTimelineItems"],
+									{
+										input: {
+											conversationId: "conv-1",
+											websiteSlug: "acme",
+										},
+									},
+									{ type: "infinite" },
+								],
+							},
+						],
+					}),
+				} as never,
+				queryNormalizer: {
+					getObjectById: getObjectByIdMock,
+					setNormalizedData: setNormalizedDataMock,
+				} as never,
+				website: {
+					id: "site-1",
+					slug: "acme",
+				},
+			} as never,
+		});
+
+		expect(updateConversationHeaderInCacheMock).toHaveBeenCalledTimes(1);
+		const [_, __, ___, updater] =
+			updateConversationHeaderInCacheMock.mock.calls[0] ?? [];
+		const updatedHeader = (updater as (value: typeof header) => typeof header)(
+			header
+		);
+
+		expect(updatedHeader.dashboardLocked).toBe(true);
+		expect(updatedHeader.dashboardLockReason).toBe("conversation_limit");
+		expect(updatedHeader.title).toBe("Visible title");
+		expect(updatedHeader.lastTimelineItem).toBeNull();
+		expect(updatedHeader.lastMessageTimelineItem).toBeNull();
+		expect(updatedHeader.lastMessageAt).toBeNull();
+	});
 });

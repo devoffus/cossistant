@@ -4,7 +4,9 @@ import type { ConversationStatus } from "@cossistant/types";
 import { useQuery } from "@tanstack/react-query";
 import { Facehash } from "facehash";
 import Link from "next/link";
+import { useCallback, useState } from "react";
 import { InboxAnalytics } from "@/components/inbox-analytics";
+import { UpgradeModal } from "@/components/plan/upgrade-modal";
 import { type ConversationHeader, useInboxes } from "@/contexts/inboxes";
 import { useTRPC } from "@/lib/trpc/client";
 import { Button } from "../ui/button";
@@ -39,7 +41,17 @@ export function ConversationsList({
 	const { data: aiAgent } = useQuery(
 		trpc.aiAgent.get.queryOptions({ websiteSlug })
 	);
+	const { data: planInfo } = useQuery(
+		trpc.plan.getPlanInfo.queryOptions({ websiteSlug })
+	);
+	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 	const { statusCounts } = useInboxes();
+	const openLockedConversationUpgradeModal = useCallback(
+		(_conversationId: string) => {
+			setIsUpgradeModalOpen(true);
+		},
+		[]
+	);
 
 	const totalConversations =
 		statusCounts.open +
@@ -141,11 +153,22 @@ export function ConversationsList({
 					}
 					basePath={basePath}
 					conversations={conversations}
+					onLockedConversationActivate={openLockedConversationUpgradeModal}
 					showWaitingForReplyPill={showWaitingForReplyPill}
 					smartItems={analyticsItems}
 					websiteSlug={websiteSlug}
 				/>
 			)}
+			{planInfo ? (
+				<UpgradeModal
+					currentPlan={planInfo.plan}
+					highlightedFeatureKey="conversations"
+					initialPlanName="pro"
+					onOpenChange={setIsUpgradeModalOpen}
+					open={isUpgradeModalOpen}
+					websiteSlug={websiteSlug}
+				/>
+			) : null}
 		</Page>
 	);
 }

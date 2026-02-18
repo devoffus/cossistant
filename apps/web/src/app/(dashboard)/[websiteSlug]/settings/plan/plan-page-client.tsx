@@ -64,6 +64,7 @@ export function PlanPageClient({
 			onOpenChange={setIsSuccessModalOpen}
 			open={isSuccessModalOpen}
 			plan={planInfo.plan}
+			rollingWindowDays={planInfo.hardLimitStatus.rollingWindowDays}
 			usage={planInfo.usage}
 		/>
 	);

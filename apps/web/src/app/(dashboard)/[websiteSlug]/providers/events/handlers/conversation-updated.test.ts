@@ -186,4 +186,82 @@ describe("handleConversationUpdated", () => {
 			exact: true,
 		});
 	});
+
+	it("keeps locked preview fields redacted while allowing title updates", async () => {
+		const normalizedHeader = {
+			id: "conv-1",
+			title: "Old title",
+			status: "open",
+			deletedAt: null,
+			priority: "normal",
+			escalatedAt: null,
+			escalationReason: null,
+			resolvedAt: null,
+			resolvedByUserId: null,
+			resolvedByAiAgentId: null,
+			resolutionTime: null,
+			lastTimelineItem: null,
+			lastMessageTimelineItem: null,
+			lastMessageAt: null,
+			dashboardLocked: true,
+			dashboardLockReason: "conversation_limit" as const,
+		};
+
+		const setNormalizedDataMock = mock((() => {}) as (value: unknown) => void);
+		const getObjectByIdMock = mock(
+			(() => normalizedHeader) as (id: string) => unknown
+		);
+		const invalidateQueriesMock = mock((async () => {}) as (
+			input: unknown
+		) => Promise<void>);
+
+		const { handleConversationUpdated } =
+			await conversationUpdatedModulePromise;
+
+		handleConversationUpdated({
+			event: {
+				type: "conversationUpdated",
+				payload: {
+					websiteId: "site-1",
+					organizationId: "org-1",
+					visitorId: "visitor-1",
+					userId: null,
+					conversationId: "conv-1",
+					updates: {
+						title: "New locked title",
+						status: "resolved",
+					},
+					aiAgentId: "ai-1",
+				},
+			} as never,
+			context: {
+				queryClient: {
+					invalidateQueries: invalidateQueriesMock,
+				} as never,
+				queryNormalizer: {
+					getObjectById: getObjectByIdMock,
+					setNormalizedData: setNormalizedDataMock,
+				} as never,
+				website: {
+					id: "site-1",
+					slug: "acme",
+				},
+				userId: "user-1",
+			} as never,
+		});
+
+		const updater = updateConversationHeaderInCacheMock.mock.calls[0]?.[3] as (
+			header: typeof normalizedHeader
+		) => typeof normalizedHeader;
+		const updatedViaCacheUpdater = updater(normalizedHeader);
+
+		expect(updatedViaCacheUpdater.title).toBe("New locked title");
+		expect(updatedViaCacheUpdater.lastTimelineItem).toBeNull();
+		expect(updatedViaCacheUpdater.lastMessageTimelineItem).toBeNull();
+		expect(updatedViaCacheUpdater.lastMessageAt).toBeNull();
+		expect(updatedViaCacheUpdater.dashboardLocked).toBe(true);
+		expect(updatedViaCacheUpdater.dashboardLockReason).toBe(
+			"conversation_limit"
+		);
+	});
 });

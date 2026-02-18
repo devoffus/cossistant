@@ -23,6 +23,7 @@ type UseSendConversationMessageOptions = {
 	websiteSlug: string;
 	currentUserId: string;
 	pageLimit?: number;
+	onSendForbidden?: () => void;
 };
 
 type UseSendConversationMessageReturn = {
@@ -39,6 +40,7 @@ export function useSendConversationMessage({
 	websiteSlug,
 	currentUserId,
 	pageLimit = DEFAULT_PAGE_LIMIT,
+	onSendForbidden,
 }: UseSendConversationMessageOptions): UseSendConversationMessageReturn {
 	const trpc = useTRPC();
 	const queryClient = useQueryClient();
@@ -142,6 +144,28 @@ export function useSendConversationMessage({
 					timelineItemId
 				);
 
+				const dataCode =
+					(
+						error as {
+							data?: {
+								code?: string;
+							};
+						}
+					)?.data?.code ??
+					(
+						error as {
+							shape?: {
+								data?: {
+									code?: string;
+								};
+							};
+						}
+					)?.shape?.data?.code;
+
+				if (dataCode === "FORBIDDEN") {
+					onSendForbidden?.();
+				}
+
 				throw error;
 			} finally {
 				setIsSubmitting(false);
@@ -153,6 +177,7 @@ export function useSendConversationMessage({
 			timelineItemsQueryKey,
 			queryClient,
 			sendMessage,
+			onSendForbidden,
 			uploadFiles,
 			websiteSlug,
 		]

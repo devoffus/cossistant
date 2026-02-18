@@ -455,6 +455,10 @@ export function useFilteredConversations({
 		);
 	}, [selectedConversationId, unfilteredConversations]);
 
+	const selectedConversationLocked = Boolean(
+		selectedConversation?.dashboardLocked
+	);
+
 	const nextConversation =
 		currentIndex >= 0 && currentIndex < conversations.length - 1
 			? conversations[currentIndex + 1] || null
@@ -548,7 +552,10 @@ export function useFilteredConversations({
 		statusCounts,
 		selectedConversationIndex: currentIndex,
 		selectedConversation,
-		selectedVisitorId: selectedConversation?.visitorId || null,
+		selectedConversationLocked,
+		selectedVisitorId: selectedConversationLocked
+			? null
+			: selectedConversation?.visitorId || null,
 		totalCount: conversations.length,
 		isLoading,
 		// Smart ordering

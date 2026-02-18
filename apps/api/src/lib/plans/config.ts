@@ -58,15 +58,16 @@ export const FEATURE_CONFIG: Record<FeatureKey, FeatureConfig> = {
 	conversations: {
 		key: "conversations",
 		name: "Conversations",
-		description: "Number of conversations that can be created per month",
-		unit: "per month",
+		description:
+			"Number of conversations that can be created in a rolling 30-day window",
+		unit: "per rolling 30 days",
 		category: "primary",
 	},
 	messages: {
 		key: "messages",
 		name: "Messages",
-		description: "Total number of messages allowed per month",
-		unit: "per month",
+		description: "Total number of messages allowed in a rolling 30-day window",
+		unit: "per rolling 30 days",
 		category: "primary",
 	},
 	contacts: {
@@ -264,7 +265,7 @@ export const PLAN_CONFIG: Record<PlanName, PlanConfig> = {
 		name: "free",
 		displayName: "Free",
 		features: {
-			conversations: 100, // Limited conversations
+			conversations: 50, // Limited conversations
 			messages: 500, // Limited messages
 			contacts: 50, // Limited contacts
 			"conversation-retention": 30, // Days - conversations retained for 30 days

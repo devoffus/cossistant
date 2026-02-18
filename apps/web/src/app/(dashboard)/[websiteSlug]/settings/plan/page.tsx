@@ -12,6 +12,17 @@ import { getQueryClient, prefetch, trpc } from "@/lib/trpc/server";
 import { PlanPageClient } from "./plan-page-client";
 import { UpgradeButton } from "./upgrade-button";
 
+function formatRollingWindowUsage(
+	current: number,
+	limit: number | null
+): string {
+	if (limit === null) {
+		return `${current.toLocaleString()} / Unlimited (rolling 30 days)`;
+	}
+
+	return `${current.toLocaleString()} / ${limit.toLocaleString()} (rolling 30 days)`;
+}
+
 type UsageSettingsPageProps = {
 	params: Promise<{
 		websiteSlug: string;
@@ -126,14 +137,16 @@ async function PlanInfoContent({ websiteSlug }: { websiteSlug: string }) {
 					{/* Conversations */}
 					<UsageBar
 						current={usage.conversations}
-						label="Conversations"
+						formatValue={formatRollingWindowUsage}
+						label="Conversations (Rolling 30 Days)"
 						limit={plan.features.conversations}
 					/>
 
 					{/* Messages */}
 					<UsageBar
 						current={usage.messages}
-						label="Messages"
+						formatValue={formatRollingWindowUsage}
+						label="Messages (Rolling 30 Days)"
 						limit={plan.features.messages}
 					/>
 

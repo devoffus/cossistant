@@ -92,10 +92,10 @@ const FeatureCell = ({
 				displayValue = value === 1 ? `${value} agent` : `${value} agents`;
 			} else if (unit === "links") {
 				displayValue = `${value} links`;
-			} else if (unit === "per month") {
-				// Format large numbers with commas for monthly limits
+			} else if (unit === "per month" || unit === "per rolling 30 days") {
+				// Format large numbers with commas for rolling-window limits
 				const formattedValue = value.toLocaleString();
-				displayValue = `${formattedValue} per month`;
+				displayValue = `${formattedValue} / rolling 30 days`;
 			} else if (unit === "credits per month") {
 				// Format AI credits with commas
 				const formattedValue = value.toLocaleString();
@@ -395,8 +395,8 @@ export default function PricingPage() {
 					<AccordionItem value="item-4">
 						<AccordionTrigger>When do my usage limits reset?</AccordionTrigger>
 						<AccordionContent>
-							All usage limits operate on a rolling 30-day window from when each
-							limit was first reached.
+							Message and conversation limits use a rolling 30-day window. At
+							any moment, we count usage from the last 30 days.
 						</AccordionContent>
 					</AccordionItem>
 					<AccordionItem value="item-5">

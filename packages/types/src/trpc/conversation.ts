@@ -104,6 +104,10 @@ export const conversationHeaderSchema = z.object({
 	lastSeenAt: z.string().nullable(),
 	lastMessageTimelineItem: timelineItemSchema.nullable(),
 	lastTimelineItem: timelineItemSchema.nullable(),
+	dashboardLocked: z.boolean().optional(),
+	dashboardLockReason: z
+		.union([z.literal("conversation_limit"), z.null()])
+		.optional(),
 	viewIds: z.array(z.string()),
 	seenData: z.array(conversationSeenSchema),
 });

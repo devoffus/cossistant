@@ -1,9 +1,18 @@
-import { db } from "@api/db";
-import { getWebsiteUsageCounts } from "@api/db/queries/usage";
+import {
+	getContactCount,
+	getRollingWindowConversationCount,
+	getRollingWindowMessageCount,
+	getTeamMemberCount,
+	HARD_LIMIT_ROLLING_WINDOW_DAYS,
+} from "@api/db/queries/usage";
 import { getWebsiteBySlugWithAccess } from "@api/db/queries/website";
 import { member } from "@api/db/schema/auth";
 import { website } from "@api/db/schema/website";
 import { env } from "@api/env";
+import {
+	getDashboardConversationLockCutoff,
+	resolveDashboardHardLimitPolicy,
+} from "@api/lib/hard-limits/dashboard";
 import { getPlanForWebsite } from "@api/lib/plans/access";
 import { getPlanConfig, type PlanName } from "@api/lib/plans/config";
 import {
@@ -70,11 +79,48 @@ export const planRouter = createTRPCRouter({
 				});
 			}
 
-			const usageCounts = await getWebsiteUsageCounts(db, {
-				websiteId: websiteData.id,
-				organizationId: websiteData.organizationId,
-				teamId: websiteData.teamId,
-			});
+			const hardLimitPolicy = resolveDashboardHardLimitPolicy(planInfo);
+
+			const [
+				messages,
+				conversations,
+				contacts,
+				teamMembers,
+				conversationLockCutoff,
+			] = await Promise.all([
+				getRollingWindowMessageCount(ctx.db, {
+					websiteId: websiteData.id,
+					organizationId: websiteData.organizationId,
+					windowStart: hardLimitPolicy.windowStart,
+				}),
+				getRollingWindowConversationCount(ctx.db, {
+					websiteId: websiteData.id,
+					organizationId: websiteData.organizationId,
+					windowStart: hardLimitPolicy.windowStart,
+				}),
+				getContactCount(ctx.db, {
+					websiteId: websiteData.id,
+					organizationId: websiteData.organizationId,
+				}),
+				getTeamMemberCount(ctx.db, {
+					teamId: websiteData.teamId,
+					organizationId: websiteData.organizationId,
+				}),
+				getDashboardConversationLockCutoff(ctx.db, {
+					websiteId: websiteData.id,
+					organizationId: websiteData.organizationId,
+					policy: hardLimitPolicy,
+				}),
+			]);
+
+			const messagesReached =
+				hardLimitPolicy.messageLimit !== null
+					? messages >= hardLimitPolicy.messageLimit
+					: false;
+			const conversationsReached =
+				hardLimitPolicy.conversationLimit !== null
+					? conversations >= hardLimitPolicy.conversationLimit
+					: false;
 
 			return {
 				plan: {
@@ -84,10 +130,32 @@ export const planRouter = createTRPCRouter({
 					features: planInfo.features,
 				},
 				usage: {
-					messages: usageCounts.messages,
-					contacts: usageCounts.contacts,
-					conversations: usageCounts.conversations,
-					teamMembers: usageCounts.teamMembers,
+					messages,
+					contacts,
+					conversations,
+					teamMembers,
+				},
+				hardLimitStatus: {
+					rollingWindowDays: HARD_LIMIT_ROLLING_WINDOW_DAYS,
+					windowStart: hardLimitPolicy.windowStart,
+					enforced: hardLimitPolicy.enforced,
+					unavailableReason: hardLimitPolicy.unavailableReason,
+					messages: {
+						limit: hardLimitPolicy.messageLimit,
+						used: messages,
+						reached: messagesReached,
+					},
+					conversations: {
+						limit: hardLimitPolicy.conversationLimit,
+						used: conversations,
+						reached: conversationsReached,
+						lockCutoff: conversationLockCutoff
+							? {
+									createdAt: conversationLockCutoff.createdAt,
+									id: conversationLockCutoff.id,
+								}
+							: null,
+					},
 				},
 			};
 		}),

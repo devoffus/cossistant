@@ -14,6 +14,10 @@ import {
 	EscalationAction,
 	type EscalationActionProps,
 } from "./multimodal-input/escalation-action";
+import {
+	LimitAction,
+	type LimitActionProps,
+} from "./multimodal-input/limit-action";
 
 type ConversationTimelineProps = ComponentProps<
 	typeof ConversationTimelineList
@@ -26,6 +30,8 @@ export type ConversationProps = {
 	visitorSidebar: VisitorSidebarProps;
 	/** If set, shows escalation action instead of input */
 	escalation?: EscalationActionProps | null;
+	/** If set, shows hard-limit action instead of input */
+	limitAction?: LimitActionProps | null;
 };
 
 export function Conversation({
@@ -34,6 +40,7 @@ export function Conversation({
 	input,
 	visitorSidebar,
 	escalation,
+	limitAction,
 }: ConversationProps) {
 	// Track input/escalation height for dynamic timeline padding
 	const [inputHeight, setInputHeight] = useState(80); // Default ~80px for initial render
@@ -45,6 +52,8 @@ export function Conversation({
 				<ConversationTimelineList {...timeline} inputHeight={inputHeight} />
 				{escalation ? (
 					<EscalationAction {...escalation} onHeightChange={setInputHeight} />
+				) : limitAction ? (
+					<LimitAction {...limitAction} onHeightChange={setInputHeight} />
 				) : (
 					<MultimodalInput {...input} onHeightChange={setInputHeight} />
 				)}

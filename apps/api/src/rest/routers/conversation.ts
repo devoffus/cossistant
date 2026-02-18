@@ -13,6 +13,12 @@ import {
 	conversation,
 	type conversationTimelineItem,
 } from "@api/db/schema/conversation";
+import {
+	applyDashboardConversationHardLimit,
+	getDashboardConversationLockCutoff,
+	resolveDashboardHardLimitPolicy,
+} from "@api/lib/hard-limits/dashboard";
+import { getPlanForWebsite } from "@api/lib/plans/access";
 import { trackConversationMetric } from "@api/lib/tinybird-sdk";
 import { markVisitorPresence } from "@api/services/presence";
 import {
@@ -328,9 +334,22 @@ conversationRouter.openapi(
 		});
 
 		if (header) {
+			const planInfo = await getPlanForWebsite(website);
+			const hardLimitPolicy = resolveDashboardHardLimitPolicy(planInfo);
+			const lockCutoff = await getDashboardConversationLockCutoff(db, {
+				websiteId: website.id,
+				organizationId: organization.id,
+				policy: hardLimitPolicy,
+			});
+			const eventHeader = applyDashboardConversationHardLimit({
+				conversation: header,
+				policy: hardLimitPolicy,
+				cutoff: lockCutoff,
+			});
+
 			await emitConversationCreatedEvent({
 				conversation: conversationRecord,
-				header,
+				header: eventHeader,
 			});
 		}
 

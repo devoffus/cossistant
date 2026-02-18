@@ -1,4 +1,4 @@
-import type { Database } from "@api/db";
+import type { DatabaseClient } from "@api/db";
 import {
 	contact,
 	conversation,
@@ -7,7 +7,31 @@ import {
 	teamMember,
 } from "@api/db/schema";
 import { ConversationTimelineType } from "@cossistant/types";
-import { and, count, eq, isNull } from "drizzle-orm";
+import type { ConversationHardLimitCutoff } from "@cossistant/types/trpc/conversation-hard-limit";
+
+export type { ConversationHardLimitCutoff } from "@cossistant/types/trpc/conversation-hard-limit";
+export { isConversationAfterHardLimitCutoff } from "@cossistant/types/trpc/conversation-hard-limit";
+
+import { and, asc, count, eq, gte, isNull } from "drizzle-orm";
+
+export const HARD_LIMIT_ROLLING_WINDOW_DAYS = 30;
+
+const HARD_LIMIT_ROLLING_WINDOW_MS =
+	HARD_LIMIT_ROLLING_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+export type ConversationHardLimitCutoffResult = {
+	reached: boolean;
+	cutoff: ConversationHardLimitCutoff | null;
+	hasOverflow: boolean;
+};
+
+export function getHardLimitRollingWindowStart(now: Date = new Date()): string {
+	return new Date(now.getTime() - HARD_LIMIT_ROLLING_WINDOW_MS).toISOString();
+}
+
+function resolveWindowStart(windowStart?: string): string {
+	return windowStart ?? getHardLimitRollingWindowStart();
+}
 
 /**
  * Get the count of messages for a website
@@ -15,7 +39,7 @@ import { and, count, eq, isNull } from "drizzle-orm";
  * Note: conversationTimelineItem doesn't have websiteId directly, so we join with conversation
  */
 export async function getMessageCount(
-	db: Database,
+	db: DatabaseClient,
 	params: {
 		websiteId: string;
 		organizationId: string;
@@ -42,10 +66,44 @@ export async function getMessageCount(
 }
 
 /**
+ * Get the count of messages in the rolling hard-limit window.
+ */
+export async function getRollingWindowMessageCount(
+	db: DatabaseClient,
+	params: {
+		websiteId: string;
+		organizationId: string;
+		windowStart?: string;
+	}
+): Promise<number> {
+	const windowStart = resolveWindowStart(params.windowStart);
+
+	const result = await db
+		.select({ count: count() })
+		.from(conversationTimelineItem)
+		.innerJoin(
+			conversation,
+			eq(conversation.id, conversationTimelineItem.conversationId)
+		)
+		.where(
+			and(
+				eq(conversation.websiteId, params.websiteId),
+				eq(conversation.organizationId, params.organizationId),
+				eq(conversationTimelineItem.organizationId, params.organizationId),
+				eq(conversationTimelineItem.type, ConversationTimelineType.MESSAGE),
+				gte(conversationTimelineItem.createdAt, windowStart),
+				isNull(conversationTimelineItem.deletedAt)
+			)
+		);
+
+	return result[0]?.count ?? 0;
+}
+
+/**
  * Get the count of contacts for a website
  */
 export async function getContactCount(
-	db: Database,
+	db: DatabaseClient,
 	params: {
 		websiteId: string;
 		organizationId: string;
@@ -69,7 +127,7 @@ export async function getContactCount(
  * Get the count of conversations for a website
  */
 export async function getConversationCount(
-	db: Database,
+	db: DatabaseClient,
 	params: {
 		websiteId: string;
 		organizationId: string;
@@ -90,11 +148,158 @@ export async function getConversationCount(
 }
 
 /**
+ * Get the count of conversations in the rolling hard-limit window.
+ */
+export async function getRollingWindowConversationCount(
+	db: DatabaseClient,
+	params: {
+		websiteId: string;
+		organizationId: string;
+		windowStart?: string;
+	}
+): Promise<number> {
+	const windowStart = resolveWindowStart(params.windowStart);
+
+	const result = await db
+		.select({ count: count() })
+		.from(conversation)
+		.where(
+			and(
+				eq(conversation.websiteId, params.websiteId),
+				eq(conversation.organizationId, params.organizationId),
+				gte(conversation.createdAt, windowStart)
+			)
+		);
+
+	return result[0]?.count ?? 0;
+}
+
+/**
+ * Efficiently checks whether the rolling-window message limit is reached.
+ * Uses OFFSET(limit - 1) to avoid counting every row on hot enforcement paths.
+ */
+export async function isRollingWindowMessageLimitReached(
+	db: DatabaseClient,
+	params: {
+		websiteId: string;
+		organizationId: string;
+		limit: number | null;
+		windowStart?: string;
+	}
+): Promise<boolean> {
+	if (params.limit === null) {
+		return false;
+	}
+
+	if (params.limit <= 0) {
+		return true;
+	}
+
+	const windowStart = resolveWindowStart(params.windowStart);
+
+	const rows = await db
+		.select({
+			id: conversationTimelineItem.id,
+		})
+		.from(conversationTimelineItem)
+		.innerJoin(
+			conversation,
+			eq(conversation.id, conversationTimelineItem.conversationId)
+		)
+		.where(
+			and(
+				eq(conversation.websiteId, params.websiteId),
+				eq(conversation.organizationId, params.organizationId),
+				eq(conversationTimelineItem.organizationId, params.organizationId),
+				eq(conversationTimelineItem.type, ConversationTimelineType.MESSAGE),
+				gte(conversationTimelineItem.createdAt, windowStart),
+				isNull(conversationTimelineItem.deletedAt)
+			)
+		)
+		.orderBy(
+			asc(conversationTimelineItem.createdAt),
+			asc(conversationTimelineItem.id)
+		)
+		.offset(params.limit - 1)
+		.limit(1);
+
+	return rows.length > 0;
+}
+
+/**
+ * Returns the Nth conversation (N = limit) in the rolling window, plus whether
+ * any conversation exists after it (overflow), to support dashboard lock logic.
+ */
+export async function getRollingWindowConversationHardLimitCutoff(
+	db: DatabaseClient,
+	params: {
+		websiteId: string;
+		organizationId: string;
+		limit: number | null;
+		windowStart?: string;
+	}
+): Promise<ConversationHardLimitCutoffResult> {
+	if (params.limit === null) {
+		return {
+			reached: false,
+			cutoff: null,
+			hasOverflow: false,
+		};
+	}
+
+	if (params.limit <= 0) {
+		return {
+			reached: true,
+			cutoff: null,
+			hasOverflow: true,
+		};
+	}
+
+	const windowStart = resolveWindowStart(params.windowStart);
+
+	const rows = await db
+		.select({
+			id: conversation.id,
+			createdAt: conversation.createdAt,
+		})
+		.from(conversation)
+		.where(
+			and(
+				eq(conversation.websiteId, params.websiteId),
+				eq(conversation.organizationId, params.organizationId),
+				gte(conversation.createdAt, windowStart)
+			)
+		)
+		.orderBy(asc(conversation.createdAt), asc(conversation.id))
+		.offset(params.limit - 1)
+		.limit(2);
+
+	const cutoff = rows[0];
+
+	if (!cutoff) {
+		return {
+			reached: false,
+			cutoff: null,
+			hasOverflow: false,
+		};
+	}
+
+	return {
+		reached: true,
+		cutoff: {
+			id: cutoff.id,
+			createdAt: cutoff.createdAt,
+		},
+		hasOverflow: rows.length > 1,
+	};
+}
+
+/**
  * Get the count of team members for a website
  * Counts team members of the website's team
  */
 export async function getTeamMemberCount(
-	db: Database,
+	db: DatabaseClient,
 	params: {
 		teamId: string;
 		organizationId: string;
@@ -134,7 +339,7 @@ export async function getTeamMemberCount(
  * Get all usage counts for a website in a single call
  */
 export async function getWebsiteUsageCounts(
-	db: Database,
+	db: DatabaseClient,
 	params: {
 		websiteId: string;
 		organizationId: string;

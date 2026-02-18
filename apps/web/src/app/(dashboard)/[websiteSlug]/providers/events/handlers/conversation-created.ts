@@ -1,4 +1,5 @@
 import type { RealtimeEvent } from "@cossistant/types/realtime-events";
+import { ensureDashboardConversationLockRedaction } from "@cossistant/types/trpc/conversation-hard-limit";
 import {
 	forEachConversationHeadersQuery,
 	prependConversationHeaderInCache,
@@ -19,18 +20,25 @@ export function handleConversationCreated({
 	}
 
 	const { header } = event.payload;
+	const safeHeader = ensureDashboardConversationLockRedaction(header);
 
 	// Type assertion needed because TimelineItemParts contains complex union types
 	// that don't fit @normy/react-query's simpler Data type constraints
 	context.queryNormalizer.setNormalizedData(
-		header as Parameters<typeof context.queryNormalizer.setNormalizedData>[0]
+		safeHeader as Parameters<
+			typeof context.queryNormalizer.setNormalizedData
+		>[0]
 	);
 
 	forEachConversationHeadersQuery(
 		context.queryClient,
 		context.website.slug,
 		(queryKey) => {
-			prependConversationHeaderInCache(context.queryClient, queryKey, header);
+			prependConversationHeaderInCache(
+				context.queryClient,
+				queryKey,
+				safeHeader
+			);
 		}
 	);
 }

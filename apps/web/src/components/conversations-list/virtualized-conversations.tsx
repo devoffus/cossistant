@@ -28,6 +28,7 @@ type ConversationsListProps = {
 	websiteSlug: string;
 	smartItems?: VirtualListItem[] | null;
 	analyticsSlot?: ReactNode;
+	onLockedConversationActivate?: (conversationId: string) => void;
 };
 
 // Memoized conversation item with proper comparison
@@ -40,6 +41,7 @@ const VirtualConversationItem = memo(
 		showWaitingForReplyPill,
 		isSmartMode,
 		onMouseEnter,
+		onLockedActivate,
 	}: {
 		conversation: ConversationHeader;
 		href: string;
@@ -48,12 +50,14 @@ const VirtualConversationItem = memo(
 		showWaitingForReplyPill: boolean;
 		isSmartMode: boolean;
 		onMouseEnter: () => void;
+		onLockedActivate?: (conversationId: string) => void;
 	}) => (
 		<ConversationItem
 			focused={focused}
 			header={conversation}
 			href={href}
 			isSmartMode={isSmartMode}
+			onLockedActivate={onLockedActivate}
 			setFocused={onMouseEnter}
 			showWaitingForReplyPill={showWaitingForReplyPill}
 			websiteSlug={websiteSlug}
@@ -69,6 +73,10 @@ const VirtualConversationItem = memo(
 			prevProps.conversation.lastSeenAt === nextProps.conversation.lastSeenAt &&
 			prevProps.conversation.status === nextProps.conversation.status &&
 			prevProps.conversation.deletedAt === nextProps.conversation.deletedAt &&
+			prevProps.conversation.dashboardLocked ===
+				nextProps.conversation.dashboardLocked &&
+			prevProps.conversation.dashboardLockReason ===
+				nextProps.conversation.dashboardLockReason &&
 			prevProps.focused === nextProps.focused &&
 			prevProps.isSmartMode === nextProps.isSmartMode &&
 			prevProps.href === nextProps.href
@@ -88,6 +96,7 @@ export function VirtualizedConversations({
 	websiteSlug,
 	smartItems,
 	analyticsSlot,
+	onLockedConversationActivate,
 }: ConversationsListProps) {
 	const scrollAreaRef = useRef<HTMLDivElement>(null);
 	const viewportRef = useRef<HTMLDivElement>(null);
@@ -115,6 +124,7 @@ export function VirtualizedConversations({
 		headerHeight: HEADER_HEIGHT,
 		analyticsHeight: ANALYTICS_HEIGHT,
 		enabled: true,
+		onLockedConversationEnter: onLockedConversationActivate,
 	});
 
 	// Memoize estimateSize to prevent virtualizer recalculations
@@ -241,7 +251,6 @@ export function VirtualizedConversations({
 
 						return (
 							<div
-								className="-ml-1"
 								key={conversation.id}
 								style={{
 									position: "absolute",
@@ -257,6 +266,7 @@ export function VirtualizedConversations({
 									focused={focusedIndex === virtualItem.index}
 									href={href}
 									isSmartMode
+									onLockedActivate={onLockedConversationActivate}
 									onMouseEnter={mouseEnterHandler ?? (() => {})}
 									showWaitingForReplyPill={showWaitingForReplyPill}
 									websiteSlug={websiteSlug}
@@ -287,6 +297,7 @@ export function VirtualizedConversations({
 								focused={focusedIndex === virtualItem.index}
 								href={href}
 								isSmartMode={false}
+								onLockedActivate={onLockedConversationActivate}
 								onMouseEnter={mouseEnterHandler ?? (() => {})}
 								showWaitingForReplyPill={showWaitingForReplyPill}
 								websiteSlug={websiteSlug}

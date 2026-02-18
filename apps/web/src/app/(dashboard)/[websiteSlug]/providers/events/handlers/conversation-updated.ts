@@ -1,4 +1,5 @@
 import type { RealtimeEvent } from "@cossistant/types/realtime-events";
+import { ensureDashboardConversationLockRedaction } from "@cossistant/types/trpc/conversation-hard-limit";
 import {
 	type ConversationHeader,
 	forEachConversationHeadersQuery,
@@ -116,6 +117,6 @@ function createHeaderUpdaterFromUpdates(
 			updatedHeader.resolutionTime = updates.resolutionTime;
 		}
 
-		return updatedHeader;
+		return ensureDashboardConversationLockRedaction(updatedHeader);
 	};
 }

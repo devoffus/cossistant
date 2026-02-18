@@ -1,6 +1,7 @@
 import { clearTypingFromTimelineItem } from "@cossistant/react/realtime/typing-store";
 import type { TimelineItem } from "@cossistant/types/api/timeline-item";
 import type { RealtimeEvent } from "@cossistant/types/realtime-events";
+import { ensureDashboardConversationLockRedaction } from "@cossistant/types/trpc/conversation-hard-limit";
 import {
 	type ConversationHeader,
 	forEachConversationHeadersQuery,
@@ -174,16 +175,20 @@ function createHeaderUpdaterFromTimelineItem(
 
 	const isMessage = item.type === "message";
 
-	return (header: ConversationHeader): ConversationHeader => ({
-		...header,
-		lastTimelineItem,
-		// Update lastMessageTimelineItem when the new item is a message so the
-		// conversations list preview picks it up immediately (it has priority
-		// over lastTimelineItem in the fallback chain).
-		...(isMessage ? { lastMessageTimelineItem: lastTimelineItem } : {}),
-		lastMessageAt,
-		updatedAt: lastMessageAt,
-	});
+	return (header: ConversationHeader): ConversationHeader => {
+		const updatedHeader: ConversationHeader = {
+			...header,
+			lastTimelineItem,
+			// Update lastMessageTimelineItem when the new item is a message so the
+			// conversations list preview picks it up immediately (it has priority
+			// over lastTimelineItem in the fallback chain).
+			...(isMessage ? { lastMessageTimelineItem: lastTimelineItem } : {}),
+			lastMessageAt,
+			updatedAt: lastMessageAt,
+		};
+
+		return ensureDashboardConversationLockRedaction(updatedHeader);
+	};
 }
 
 function toHeaderTimelineItem(

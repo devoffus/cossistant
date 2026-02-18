@@ -58,6 +58,19 @@ function formatFeatureValue(value: number | null): string {
 	return value.toLocaleString();
 }
 
+function formatFeatureValueWithUnit(
+	value: number | null,
+	valueUnitLabel?: string
+): string {
+	const formattedValue = formatFeatureValue(value);
+
+	if (value === null || !valueUnitLabel) {
+		return formattedValue;
+	}
+
+	return `${formattedValue} ${valueUnitLabel}`;
+}
+
 function PlanPriceDisplay({
 	price,
 	promoPrice,
@@ -152,8 +165,7 @@ function FeatureRow({
 								: "text-primary/40"
 					)}
 				>
-					{formatFeatureValue(currentValue)}
-					{valueUnitLabel && ` ${valueUnitLabel}`}
+					{formatFeatureValueWithUnit(currentValue, valueUnitLabel)}
 				</span>
 				<ArrowRight
 					className={cn(
@@ -168,8 +180,7 @@ function FeatureRow({
 						isHighlighted && "text-cossistant-orange"
 					)}
 				>
-					{formatFeatureValue(targetValue)}
-					{valueUnitLabel && ` ${valueUnitLabel}`}
+					{formatFeatureValueWithUnit(targetValue, valueUnitLabel)}
 				</span>
 				{upgraded && (
 					<Check
@@ -493,7 +504,7 @@ export function UpgradeModal({
 								currentValue={toNumericFeatureValue(
 									currentPlan.features.conversations
 								)}
-								label="Conversations"
+								label="Conversations (Rolling 30 Days)"
 								targetValue={toNumericFeatureValue(
 									selectedPlanConfig.features.conversations
 								)}
@@ -502,7 +513,7 @@ export function UpgradeModal({
 								currentValue={toNumericFeatureValue(
 									currentPlan.features.messages
 								)}
-								label="Messages"
+								label="Messages (Rolling 30 Days)"
 								targetValue={toNumericFeatureValue(
 									selectedPlanConfig.features.messages
 								)}

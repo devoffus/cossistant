@@ -7,9 +7,10 @@ import { useConversationFocusStore } from "@/contexts/inboxes/conversation-focus
 import type { VirtualListItem } from "./types";
 
 type UseConversationKeyboardNavigationProps = {
-	conversations: Array<{ id: string }>;
+	conversations: Array<{ id: string; dashboardLocked?: boolean }>;
 	items?: VirtualListItem[] | null;
 	basePath: string;
+	onLockedConversationEnter?: (conversationId: string) => void;
 	parentRef: React.RefObject<HTMLDivElement | null>;
 	itemHeight: number;
 	headerHeight?: number;
@@ -21,6 +22,7 @@ export function useConversationKeyboardNavigation({
 	conversations,
 	items,
 	basePath,
+	onLockedConversationEnter,
 	parentRef,
 	itemHeight,
 	headerHeight = 32,
@@ -54,19 +56,19 @@ export function useConversationKeyboardNavigation({
 	);
 
 	// Helper to get conversation ID at an index
-	const getConversationIdAtIndex = useCallback(
-		(index: number): string | null => {
+	const getConversationAtIndex = useCallback(
+		(index: number) => {
 			if (isSmartMode) {
 				const item = items[index];
 
 				if (item?.type === "conversation") {
-					return item.conversation.id;
+					return item.conversation;
 				}
 
 				return null;
 			}
 
-			return conversations[index]?.id ?? null;
+			return conversations[index] ?? null;
 		},
 		[isSmartMode, items, conversations]
 	);
@@ -234,18 +236,26 @@ export function useConversationKeyboardNavigation({
 	);
 
 	const navigateToConversation = useCallback(() => {
-		const conversationId = getConversationIdAtIndex(focusedIndex);
+		const conversation = getConversationAtIndex(focusedIndex);
 
-		if (conversationId) {
-			// Store the focused conversation ID before navigating
-			setFocusedConversationId(conversationId);
-			router.push(`${basePath}/${conversationId}`);
+		if (!conversation) {
+			return;
 		}
+
+		if (conversation.dashboardLocked) {
+			onLockedConversationEnter?.(conversation.id);
+			return;
+		}
+
+		// Store the focused conversation ID before navigating
+		setFocusedConversationId(conversation.id);
+		router.push(`${basePath}/${conversation.id}`);
 	}, [
 		focusedIndex,
-		getConversationIdAtIndex,
+		getConversationAtIndex,
 		basePath,
 		router,
+		onLockedConversationEnter,
 		setFocusedConversationId,
 	]);
 

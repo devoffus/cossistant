@@ -17,6 +17,7 @@ import { Conversation } from "@/components/conversation";
 import type { ConversationHeaderNavigationProps } from "@/components/conversation/header/navigation";
 import type { MessageVisibility } from "@/components/conversation/multimodal-input";
 import { ButtonWithPaywall } from "@/components/plan/button-with-paywall";
+import { UpgradeModal } from "@/components/plan/upgrade-modal";
 import Icon from "@/components/ui/icons";
 import { TooltipOnHover } from "@/components/ui/tooltip";
 import { useInboxes } from "@/contexts/inboxes";
@@ -51,6 +52,11 @@ export function ConversationPane({
 }: ConversationPaneProps) {
 	const trpc = useTRPC();
 	const { newMessageEnabled } = useSoundPreferences({ websiteSlug });
+	const { data: planInfo, refetch: refetchPlanInfo } = useQuery(
+		trpc.plan.getPlanInfo.queryOptions({ websiteSlug })
+	);
+	const [messageLimitLatched, setMessageLimitLatched] = useState(false);
+	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
 	// Fetch AI agent for the website to display proper names in events
 	const { data: aiAgent } = useQuery(
@@ -78,6 +84,29 @@ export function ConversationPane({
 
 	const [messageVisibility, setMessageVisibility] =
 		useState<MessageVisibility>("public");
+	const hardLimitStatus = planInfo?.hardLimitStatus;
+	const messageLimitStatus = planInfo?.hardLimitStatus.messages;
+	const hardLimitsEnforced = hardLimitStatus?.enforced ?? true;
+	const hardLimitsUnavailableReason =
+		hardLimitStatus?.unavailableReason ?? null;
+	const isPlanMessageLimitReached = Boolean(messageLimitStatus?.reached);
+	const isMessageLimitReached =
+		hardLimitsEnforced && (isPlanMessageLimitReached || messageLimitLatched);
+
+	useEffect(() => {
+		if (!(hardLimitsEnforced && isPlanMessageLimitReached)) {
+			setMessageLimitLatched(false);
+		}
+	}, [hardLimitsEnforced, isPlanMessageLimitReached]);
+
+	const handleMessageLimitReached = useCallback(() => {
+		if (!hardLimitsEnforced) {
+			return;
+		}
+
+		setMessageLimitLatched(true);
+		void refetchPlanInfo();
+	}, [hardLimitsEnforced, refetchPlanInfo]);
 
 	// Track markdown-formatted message for submission (with mentions converted)
 	const markdownMessageRef = useRef<string>("");
@@ -91,6 +120,7 @@ export function ConversationPane({
 		websiteSlug,
 		currentUserId,
 		pageLimit: MESSAGES_PAGE_LIMIT,
+		onSendForbidden: handleMessageLimitReached,
 	});
 
 	const {
@@ -114,6 +144,11 @@ export function ConversationPane({
 		submit,
 	} = useMultimodalInput({
 		onSubmit: async (payload) => {
+			if (isMessageLimitReached) {
+				handleMessageLimitReached();
+				return;
+			}
+
 			handleTypingSubmit();
 			// Use the markdown-formatted message (with mentions converted)
 			await submitConversationMessage({
@@ -125,6 +160,18 @@ export function ConversationPane({
 			markdownMessageRef.current = "";
 		},
 		onError: (submitError) => {
+			if (
+				(
+					submitError as {
+						data?: {
+							code?: string;
+						};
+					}
+				)?.data?.code === "FORBIDDEN"
+			) {
+				handleMessageLimitReached();
+			}
+
 			console.error("Failed to send message", submitError);
 		},
 	});
@@ -490,6 +537,14 @@ export function ConversationPane({
 			isLoading: isVisitorLoading,
 			visitor,
 		},
+		limitAction: isMessageLimitReached
+			? {
+					limit: messageLimitStatus?.limit ?? null,
+					onUpgradeClick: () => setIsUpgradeModalOpen(true),
+					used: messageLimitStatus?.used ?? 0,
+					windowDays: hardLimitStatus?.rollingWindowDays ?? 30,
+				}
+			: null,
 		// Show escalation action if escalated but not yet handled
 		escalation:
 			selectedConversation.escalatedAt &&
@@ -504,5 +559,26 @@ export function ConversationPane({
 				: null,
 	};
 
-	return <Conversation {...conversationProps} />;
+	return (
+		<>
+			{!hardLimitsEnforced &&
+			hardLimitsUnavailableReason === "billing_provider_unavailable" ? (
+				<div className="mx-4 mb-2 rounded border border-cossistant-orange/30 bg-cossistant-orange/5 px-3 py-2 text-cossistant-orange text-xs">
+					Hard-limit checks are temporarily unavailable while billing sync
+					recovers.
+				</div>
+			) : null}
+			<Conversation {...conversationProps} />
+			{planInfo ? (
+				<UpgradeModal
+					currentPlan={planInfo.plan}
+					highlightedFeatureKey="messages"
+					initialPlanName="pro"
+					onOpenChange={setIsUpgradeModalOpen}
+					open={isUpgradeModalOpen}
+					websiteSlug={websiteSlug}
+				/>
+			) : null}
+		</>
+	);
 }

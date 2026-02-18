@@ -21,6 +21,7 @@ type UpgradeSuccessModalProps = {
 	onOpenChange: (open: boolean) => void;
 	plan: PlanInfo["plan"];
 	usage: PlanInfo["usage"];
+	rollingWindowDays?: number;
 };
 
 // FeatureValue can be boolean, number, or null
@@ -68,6 +69,7 @@ export function UpgradeSuccessModal({
 	onOpenChange,
 	plan,
 	usage,
+	rollingWindowDays = 30,
 }: UpgradeSuccessModalProps) {
 	const pricing = getPlanPricing(plan.name);
 
@@ -84,7 +86,8 @@ export function UpgradeSuccessModal({
 						Successfully Upgraded to {plan.displayName}!
 					</DialogTitle>
 					<DialogDescription className="text-center">
-						Your plan has been upgraded and all new limits are now active.
+						Your plan has been upgraded and your rolling {rollingWindowDays}
+						-day limits are now active.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -124,12 +127,12 @@ export function UpgradeSuccessModal({
 							usage={usage.teamMembers}
 						/>
 						<LimitRow
-							label="Conversations"
+							label={`Conversations (Rolling ${rollingWindowDays} Days)`}
 							limit={plan.features.conversations}
 							usage={usage.conversations}
 						/>
 						<LimitRow
-							label="Messages"
+							label={`Messages (Rolling ${rollingWindowDays} Days)`}
 							limit={plan.features.messages}
 							usage={usage.messages}
 						/>
