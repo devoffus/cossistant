@@ -171,6 +171,31 @@ export async function updateAiAgent(
 }
 
 /**
+ * Update only the model for an AI agent.
+ * Used by runtime model auto-migration when legacy/unknown models are detected.
+ */
+export async function updateAiAgentModel(
+	db: Database,
+	params: {
+		aiAgentId: string;
+		model: string;
+	}
+): Promise<AiAgentSelect | null> {
+	const now = new Date().toISOString();
+
+	const [agent] = await db
+		.update(aiAgent)
+		.set({
+			model: params.model,
+			updatedAt: now,
+		})
+		.where(and(eq(aiAgent.id, params.aiAgentId), isNull(aiAgent.deletedAt)))
+		.returning();
+
+	return agent ?? null;
+}
+
+/**
  * Toggle AI agent active status
  */
 export async function toggleAiAgentActive(

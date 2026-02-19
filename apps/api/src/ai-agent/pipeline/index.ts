@@ -13,6 +13,19 @@
  */
 
 import type { Database } from "@api/db";
+import {
+	calculateAiCreditCharge,
+	getMinimumAiCreditCharge,
+} from "@api/lib/ai-credits/config";
+import {
+	type AiCreditGuardResult,
+	guardAiCreditRun,
+} from "@api/lib/ai-credits/guard";
+import {
+	type IngestAiCreditUsageStatus,
+	ingestAiCreditUsage,
+} from "@api/lib/ai-credits/polar-meter";
+import { logAiCreditUsageTimeline } from "@api/lib/ai-credits/timeline";
 import { generateVisitorName } from "@cossistant/core";
 import { sendMessage } from "../actions/send-message";
 import {
@@ -101,6 +114,7 @@ export async function runAiAgentPipeline(
 	let typingSessionStarted = false;
 	let publicMessagesSent = 0;
 	let continuationHint: ContinuationHint | undefined;
+	let aiCreditGuardResult: AiCreditGuardResult | null = null;
 	const publicMessageIds = new Set<string>();
 
 	const markPublicMessageSent = (params: {
@@ -136,6 +150,11 @@ export async function runAiAgentPipeline(
 				metrics: finalizeMetrics(metrics, startTime),
 			};
 		}
+		const readyIntake = intakeResult;
+		const resolvedModelId = readyIntake.modelResolution.modelIdResolved;
+		const modelIdOriginal = readyIntake.modelResolution.modelIdOriginal;
+		const modelMigrationApplied =
+			readyIntake.modelResolution.modelMigrationApplied;
 
 		const continuationResult = await continuationGate({
 			db: ctx.db,
@@ -284,6 +303,74 @@ export async function runAiAgentPipeline(
 			};
 		}
 
+		aiCreditGuardResult = await guardAiCreditRun({
+			organizationId: ctx.input.organizationId,
+			modelId: resolvedModelId,
+		});
+
+		if (!aiCreditGuardResult.allowed) {
+			const blockedReason = `AI credit guard blocked run: ${aiCreditGuardResult.reason}`;
+			const blockedBalanceBefore = aiCreditGuardResult.balance;
+			const blockedBalanceAfterEstimate =
+				typeof blockedBalanceBefore === "number"
+					? blockedBalanceBefore -
+						aiCreditGuardResult.minimumCharge.totalCredits
+					: null;
+
+			try {
+				await logAiCreditUsageTimeline({
+					db: ctx.db,
+					organizationId: ctx.input.organizationId,
+					websiteId: ctx.input.websiteId,
+					conversationId: ctx.input.conversationId,
+					visitorId: ctx.input.visitorId,
+					aiAgentId: readyIntake.aiAgent.id,
+					workflowRunId: ctx.input.workflowRunId,
+					triggerMessageId: ctx.input.messageId,
+					triggerVisibility: readyIntake.triggerMessage?.visibility,
+					payload: {
+						baseCredits: aiCreditGuardResult.minimumCharge.baseCredits,
+						modelCredits: aiCreditGuardResult.minimumCharge.modelCredits,
+						toolCredits: aiCreditGuardResult.minimumCharge.toolCredits,
+						totalCredits: aiCreditGuardResult.minimumCharge.totalCredits,
+						billableToolCount:
+							aiCreditGuardResult.minimumCharge.billableToolCount,
+						excludedToolCount:
+							aiCreditGuardResult.minimumCharge.excludedToolCount,
+						modelId: resolvedModelId,
+						modelIdOriginal,
+						modelMigrationApplied,
+						balanceBefore: blockedBalanceBefore,
+						balanceAfterEstimate: blockedBalanceAfterEstimate,
+						mode: aiCreditGuardResult.mode,
+						blockedReason: aiCreditGuardResult.blockedReason ?? "blocked",
+						ingestStatus: "skipped",
+					},
+				});
+			} catch (error) {
+				console.warn(
+					`[ai-agent] conv=${convId} | Failed to log blocked AI credit timeline`,
+					error
+				);
+			}
+
+			await emitWorkflowCompleted({
+				conversation: intakeResult.conversation,
+				aiAgentId: intakeResult.aiAgent.id,
+				workflowRunId: ctx.input.workflowRunId,
+				status: "skipped",
+				reason: blockedReason,
+			});
+
+			return {
+				status: "skipped",
+				reason: blockedReason,
+				publicMessagesSent,
+				retryable: false,
+				metrics: finalizeMetrics(metrics, startTime),
+			};
+		}
+
 		// Only start typing if AI may send visible visitor messages.
 		// background_only = private/internal only.
 		// respond_to_command may still send visitor messages even for private team triggers.
@@ -355,6 +442,92 @@ export async function runAiAgentPipeline(
 			);
 		}
 
+		const finalizeAiCreditUsage = async (
+			result: GenerationResult | null
+		): Promise<void> => {
+			if (!aiCreditGuardResult) {
+				return;
+			}
+
+			const charge = result?.toolCallsByName
+				? calculateAiCreditCharge({
+						modelId: resolvedModelId,
+						toolCallsByName: result.toolCallsByName,
+					})
+				: getMinimumAiCreditCharge(resolvedModelId);
+
+			const balanceBefore = aiCreditGuardResult.balance;
+			const balanceAfterEstimate =
+				typeof balanceBefore === "number"
+					? balanceBefore - charge.totalCredits
+					: null;
+			let ingestStatus: IngestAiCreditUsageStatus | "skipped" = "failed";
+
+			try {
+				const ingestResult = await ingestAiCreditUsage({
+					organizationId: ctx.input.organizationId,
+					credits: charge.totalCredits,
+					workflowRunId: ctx.input.workflowRunId,
+					modelId: resolvedModelId,
+					modelIdOriginal,
+					modelMigrationApplied,
+					mode: aiCreditGuardResult.mode,
+					baseCredits: charge.baseCredits,
+					modelCredits: charge.modelCredits,
+					toolCredits: charge.toolCredits,
+					billableToolCount: charge.billableToolCount,
+					excludedToolCount: charge.excludedToolCount,
+					totalToolCount: charge.totalToolCount,
+				});
+				ingestStatus = ingestResult.status;
+				if (ingestStatus === "failed") {
+					console.error(
+						`[ai-agent] conv=${convId} | Failed to ingest AI credit usage`
+					);
+				}
+			} catch (error) {
+				ingestStatus = "failed";
+				console.error(
+					`[ai-agent] conv=${convId} | Failed to ingest AI credit usage`,
+					error
+				);
+			}
+
+			try {
+				await logAiCreditUsageTimeline({
+					db: ctx.db,
+					organizationId: ctx.input.organizationId,
+					websiteId: ctx.input.websiteId,
+					conversationId: ctx.input.conversationId,
+					visitorId: ctx.input.visitorId,
+					aiAgentId: readyIntake.aiAgent.id,
+					workflowRunId: ctx.input.workflowRunId,
+					triggerMessageId: ctx.input.messageId,
+					triggerVisibility: readyIntake.triggerMessage?.visibility,
+					payload: {
+						baseCredits: charge.baseCredits,
+						modelCredits: charge.modelCredits,
+						toolCredits: charge.toolCredits,
+						totalCredits: charge.totalCredits,
+						billableToolCount: charge.billableToolCount,
+						excludedToolCount: charge.excludedToolCount,
+						modelId: resolvedModelId,
+						modelIdOriginal,
+						modelMigrationApplied,
+						balanceBefore,
+						balanceAfterEstimate,
+						mode: aiCreditGuardResult.mode,
+						ingestStatus,
+					},
+				});
+			} catch (error) {
+				console.warn(
+					`[ai-agent] conv=${convId} | Failed to log AI credit timeline`,
+					error
+				);
+			}
+		};
+
 		// Step 3: Generation - Call LLM with tools
 		const generationStart = Date.now();
 		const generationAbortController = new AbortController();
@@ -393,8 +566,9 @@ export async function runAiAgentPipeline(
 			});
 		} finally {
 			clearTimeout(generationTimeout);
+			metrics.generationMs = Date.now() - generationStart;
+			await finalizeAiCreditUsage(generationResult);
 		}
-		metrics.generationMs = Date.now() - generationStart;
 
 		// FALLBACK: If AI returned respond/escalate/resolve but didn't call sendMessage,
 		// send a fallback message so the visitor isn't left without a response

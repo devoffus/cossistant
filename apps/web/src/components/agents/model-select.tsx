@@ -1,7 +1,6 @@
 "use client";
 
 import type { RouterOutputs } from "@cossistant/api/types";
-import { AI_MODELS } from "@cossistant/types";
 import { useState } from "react";
 import { UpgradeModal } from "@/components/plan/upgrade-modal";
 import Icon, { type IconName } from "@/components/ui/icons";
@@ -18,7 +17,6 @@ type ModelSelectProps = {
 	value: string;
 	onChange: (value: string) => void;
 	disabled?: boolean;
-	isFreePlan: boolean;
 	websiteSlug: string;
 	planInfo: RouterOutputs["plan"]["getPlanInfo"] | undefined;
 	/** Optional label to show above the select */
@@ -31,22 +29,40 @@ export function ModelSelect({
 	value,
 	onChange,
 	disabled,
-	isFreePlan,
 	websiteSlug,
 	planInfo,
 	label,
 	description,
 }: ModelSelectProps) {
 	const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+	const aiModels = planInfo?.aiModels.items ?? [];
+	const latestModelsFeature =
+		planInfo?.plan.features["latest-ai-models"] === true;
+	const hasLockedModels = aiModels.some(
+		(model) => !model.selectableForCurrentPlan
+	);
+	const availableModels =
+		aiModels.length > 0
+			? aiModels
+			: value
+				? [
+						{
+							id: value,
+							label: value,
+							provider: "",
+							icon: "agent",
+							selectableForCurrentPlan: true,
+						},
+					]
+				: [];
 
 	const handleValueChange = (newValue: string) => {
-		const selectedModel = AI_MODELS.find((m) => m.value === newValue);
-		const isPaidModel =
-			selectedModel &&
-			"requiresPaid" in selectedModel &&
-			selectedModel.requiresPaid;
+		const selectedModel = aiModels.find((model) => model.id === newValue);
+		const isLocked = selectedModel
+			? !selectedModel.selectableForCurrentPlan
+			: false;
 
-		if (isFreePlan && isPaidModel) {
+		if (isLocked) {
 			setShowUpgradeModal(true);
 			return;
 		}
@@ -67,21 +83,22 @@ export function ModelSelect({
 						<SelectValue placeholder="Select a model" />
 					</SelectTrigger>
 					<SelectContent>
-						{AI_MODELS.map((model) => {
-							const isPaidModel = "requiresPaid" in model && model.requiresPaid;
-							const showUpgradeBadge = isFreePlan && isPaidModel;
+						{availableModels.map((model) => {
+							const showUpgradeBadge = !model.selectableForCurrentPlan;
 
 							return (
-								<SelectItem key={model.value} value={model.value}>
+								<SelectItem key={model.id} value={model.id}>
 									<span className="flex items-center gap-2">
 										<Icon
 											className="size-4 text-foreground"
 											name={model.icon as IconName}
 										/>
 										<span>{model.label}</span>
-										<span className="text-muted-foreground text-xs">
-											({model.provider})
-										</span>
+										{model.provider ? (
+											<span className="text-muted-foreground text-xs">
+												({model.provider})
+											</span>
+										) : null}
 										{showUpgradeBadge && (
 											<span className="rounded bg-cossistant-orange/10 px-1.5 py-0.5 font-medium text-[10px] text-cossistant-orange">
 												Upgrade
@@ -97,7 +114,7 @@ export function ModelSelect({
 					{description && (
 						<p className="text-muted-foreground text-xs">{description}</p>
 					)}
-					{isFreePlan && (
+					{hasLockedModels && !latestModelsFeature && (
 						<button
 							className="font-medium text-cossistant-orange text-sm hover:underline"
 							onClick={() => setShowUpgradeModal(true)}

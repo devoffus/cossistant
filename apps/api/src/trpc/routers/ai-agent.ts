@@ -12,6 +12,7 @@ import {
 	toggleAiAgentActive,
 	updateAiAgent,
 	updateAiAgentBehaviorSettings,
+	updateAiAgentModel,
 	updateAiAgentTrainingStatus,
 } from "@api/db/queries/ai-agent";
 import {
@@ -27,6 +28,11 @@ import {
 	updateWebsite,
 } from "@api/db/queries/website";
 import { knowledge } from "@api/db/schema/knowledge";
+import {
+	isKnownModel,
+	resolveModelForExecution,
+} from "@api/lib/ai-credits/config";
+import { canUseSelectedModelForPlan } from "@api/lib/ai-credits/entitlement";
 import { getPlanForWebsite } from "@api/lib/plans/access";
 import { firecrawlService } from "@api/services/firecrawl";
 import { generateAgentBasePrompt } from "@api/services/prompt-generator";
@@ -159,6 +165,94 @@ function handlePromptDocumentMutationError(error: unknown): never {
 	throw error;
 }
 
+async function assertModelAllowedForWebsite(params: {
+	website: Parameters<typeof getPlanForWebsite>[0];
+	modelId: string;
+}): Promise<void> {
+	const planInfo = await getPlanForWebsite(params.website);
+	const latestModelsFeature = planInfo.features["latest-ai-models"];
+	const modelSelectionError = getModelSelectionError({
+		modelId: params.modelId,
+		latestModelsFeature,
+	});
+	if (modelSelectionError) {
+		throw new TRPCError(modelSelectionError);
+	}
+}
+
+export function getModelSelectionError(params: {
+	modelId: string;
+	latestModelsFeature: unknown;
+}): { code: "BAD_REQUEST" | "FORBIDDEN"; message: string } | null {
+	if (!isKnownModel(params.modelId)) {
+		return {
+			code: "BAD_REQUEST",
+			message:
+				"Unknown AI model selected. Please choose one of the supported models.",
+		};
+	}
+
+	if (
+		!canUseSelectedModelForPlan({
+			modelId: params.modelId,
+			latestModelsFeature: params.latestModelsFeature,
+		})
+	) {
+		return {
+			code: "FORBIDDEN",
+			message:
+				"This model requires a plan with access to latest AI models. Please upgrade your plan or choose a lower-tier model.",
+		};
+	}
+
+	return null;
+}
+
+async function resolveAiAgentModelForRead(params: {
+	db: Parameters<typeof updateAiAgentModel>[0];
+	agent: Awaited<ReturnType<typeof getAiAgentForWebsite>>;
+	websiteSlug: string;
+}): Promise<NonNullable<Awaited<ReturnType<typeof getAiAgentForWebsite>>>> {
+	if (!params.agent) {
+		throw new Error("resolveAiAgentModelForRead requires an agent");
+	}
+
+	const modelResolution = resolveModelForExecution(params.agent.model);
+	if (!modelResolution.modelMigrationApplied) {
+		return params.agent;
+	}
+
+	console.warn(
+		`[ai-agent] website=${params.websiteSlug} | Migrating unknown saved model to default`,
+		{
+			aiAgentId: params.agent.id,
+			modelIdOriginal: modelResolution.modelIdOriginal,
+			modelIdResolved: modelResolution.modelIdResolved,
+			migrationApplied: true,
+		}
+	);
+
+	try {
+		const persisted = await updateAiAgentModel(params.db, {
+			aiAgentId: params.agent.id,
+			model: modelResolution.modelIdResolved,
+		});
+		if (persisted) {
+			return persisted;
+		}
+	} catch (error) {
+		console.warn(
+			`[ai-agent] website=${params.websiteSlug} | Failed to persist migrated model`,
+			error
+		);
+	}
+
+	return {
+		...params.agent,
+		model: modelResolution.modelIdResolved,
+	};
+}
+
 export const aiAgentRouter = createTRPCRouter({
 	/**
 	 * Get the AI agent for a website
@@ -189,7 +283,13 @@ export const aiAgentRouter = createTRPCRouter({
 				return null;
 			}
 
-			return toAiAgentResponse(agent);
+			const resolvedAgent = await resolveAiAgentModelForRead({
+				db,
+				agent,
+				websiteSlug: input.websiteSlug,
+			});
+
+			return toAiAgentResponse(resolvedAgent);
 		}),
 
 	/**
@@ -225,6 +325,11 @@ export const aiAgentRouter = createTRPCRouter({
 				});
 			}
 
+			await assertModelAllowedForWebsite({
+				website: websiteData,
+				modelId: input.model,
+			});
+
 			const agent = await createAiAgent(db, {
 				name: input.name,
 				description: input.description,
@@ -258,6 +363,11 @@ export const aiAgentRouter = createTRPCRouter({
 					message: "Website not found or access denied",
 				});
 			}
+
+			await assertModelAllowedForWebsite({
+				website: websiteData,
+				modelId: input.model,
+			});
 
 			const agent = await updateAiAgent(db, {
 				aiAgentId: input.aiAgentId,

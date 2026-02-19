@@ -142,6 +142,7 @@ const FeatureCell = ({
 
 export default function PricingPage() {
 	const plans = [PLAN_CONFIG.free, PLAN_CONFIG.hobby, PLAN_CONFIG.pro];
+	const hiddenPricingFeatures = new Set<FeatureKey>(["ai-support-agents"]);
 
 	// Group features by category
 	const groupFeaturesByCategory = (
@@ -151,6 +152,9 @@ export default function PricingPage() {
 		const secondary: [FeatureKey, FeatureValue][] = [];
 
 		for (const [key, value] of Object.entries(features)) {
+			if (hiddenPricingFeatures.has(key as FeatureKey)) {
+				continue;
+			}
 			const featureConfig = FEATURE_CONFIG[key as FeatureKey];
 			if (featureConfig.category === "primary") {
 				primary.push([key as FeatureKey, value]);

@@ -8,7 +8,7 @@ import {
 	type PlanName,
 } from "@api/lib/plans/config";
 import type { RouterOutputs } from "@cossistant/api/types";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -273,6 +273,7 @@ export function UpgradeModal({
 	highlightedFeatureKey,
 }: UpgradeModalProps) {
 	const trpc = useTRPC();
+	const queryClient = useQueryClient();
 	const preferredPlanName = useMemo<PlanName>(
 		() => (PLAN_CONFIG.pro ? "pro" : initialPlanName),
 		[initialPlanName]
@@ -321,9 +322,17 @@ export function UpgradeModal({
 
 	const { mutateAsync: createCheckout, isPending: isLoading } = useMutation(
 		trpc.plan.createCheckout.mutationOptions({
-			onSuccess: (data) => {
-				// Redirect to Polar checkout
-				window.location.href = data.checkoutUrl;
+			onSuccess: async (data) => {
+				if (data.mode === "checkout" && data.checkoutUrl) {
+					window.location.href = data.checkoutUrl;
+					return;
+				}
+
+				await queryClient.invalidateQueries({
+					queryKey: trpc.plan.getPlanInfo.queryKey({ websiteSlug }),
+				});
+				toast.success("Plan updated successfully.");
+				onOpenChange(false);
 			},
 			onError: (error) => {
 				toast.error("We couldn't start the upgrade.");

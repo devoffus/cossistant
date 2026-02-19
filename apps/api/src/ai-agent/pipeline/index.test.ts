@@ -18,6 +18,31 @@ const followupMock = mock((async () => {}) as (
 const logDecisionTimelineStateMock = mock((async () => {}) as (
 	...args: unknown[]
 ) => Promise<void>);
+const guardAiCreditRunMock = mock((async () => ({
+	allowed: true,
+	mode: "normal",
+	reason: "ok",
+	blockedReason: null,
+	minimumCharge: {
+		baseCredits: 1,
+		modelCredits: 0,
+		toolCredits: 0,
+		totalCredits: 1,
+		billableToolCount: 0,
+		excludedToolCount: 0,
+		totalToolCount: 0,
+	},
+	balance: 10,
+	meterBacked: true,
+	meterSource: "live",
+	lastSyncedAt: new Date().toISOString(),
+})) as (...args: unknown[]) => Promise<unknown>);
+const ingestAiCreditUsageMock = mock((async () => ({
+	status: "ingested" as const,
+})) as (...args: unknown[]) => Promise<{ status: string }>);
+const logAiCreditUsageTimelineMock = mock((async () => {}) as (
+	...args: unknown[]
+) => Promise<void>);
 
 const emitDecisionMadeMock = mock((async () => {}) as (
 	...args: unknown[]
@@ -91,6 +116,18 @@ mock.module("../tools/tool-call-logger", () => ({
 	logDecisionTimelineState: logDecisionTimelineStateMock,
 }));
 
+mock.module("@api/lib/ai-credits/guard", () => ({
+	guardAiCreditRun: guardAiCreditRunMock,
+}));
+
+mock.module("@api/lib/ai-credits/polar-meter", () => ({
+	ingestAiCreditUsage: ingestAiCreditUsageMock,
+}));
+
+mock.module("@api/lib/ai-credits/timeline", () => ({
+	logAiCreditUsageTimeline: logAiCreditUsageTimelineMock,
+}));
+
 const pipelineModulePromise = import("./index");
 
 function buildReadyIntakeResult() {
@@ -98,6 +135,12 @@ function buildReadyIntakeResult() {
 		status: "ready",
 		aiAgent: {
 			id: "ai-1",
+			model: "moonshotai/kimi-k2-0905",
+		},
+		modelResolution: {
+			modelIdOriginal: "moonshotai/kimi-k2-0905",
+			modelIdResolved: "moonshotai/kimi-k2-0905",
+			modelMigrationApplied: false,
 		},
 		conversation: {
 			id: "conv-1",
@@ -145,11 +188,37 @@ describe("runAiAgentPipeline retryability and typing cleanup", () => {
 		typingHeartbeatStartMock.mockReset();
 		typingHeartbeatStopMock.mockReset();
 		logDecisionTimelineStateMock.mockReset();
+		guardAiCreditRunMock.mockReset();
+		ingestAiCreditUsageMock.mockReset();
+		logAiCreditUsageTimelineMock.mockReset();
 
 		intakeMock.mockResolvedValue(buildReadyIntakeResult());
 		decideMock.mockResolvedValue(buildDecisionResult());
 		executeMock.mockResolvedValue({});
 		followupMock.mockResolvedValue(undefined);
+		guardAiCreditRunMock.mockResolvedValue({
+			allowed: true,
+			mode: "normal",
+			reason: "ok",
+			blockedReason: null,
+			minimumCharge: {
+				baseCredits: 1,
+				modelCredits: 0,
+				toolCredits: 0,
+				totalCredits: 1,
+				billableToolCount: 0,
+				excludedToolCount: 0,
+				totalToolCount: 0,
+			},
+			balance: 10,
+			meterBacked: true,
+			meterSource: "live",
+			lastSyncedAt: new Date().toISOString(),
+		});
+		ingestAiCreditUsageMock.mockResolvedValue({
+			status: "ingested",
+		});
+		logAiCreditUsageTimelineMock.mockResolvedValue(undefined);
 	});
 
 	it("marks failures before any public send as retryable", async () => {
@@ -176,6 +245,7 @@ describe("runAiAgentPipeline retryability and typing cleanup", () => {
 		expect(result.status).toBe("error");
 		expect(result.publicMessagesSent).toBe(0);
 		expect(result.retryable).toBe(true);
+		expect(ingestAiCreditUsageMock).toHaveBeenCalledTimes(1);
 		expect(logDecisionTimelineStateMock).toHaveBeenCalledTimes(2);
 		expect(logDecisionTimelineStateMock.mock.calls[0]?.[0]).toMatchObject({
 			state: "partial",
@@ -296,6 +366,7 @@ describe("runAiAgentPipeline retryability and typing cleanup", () => {
 
 		expect(result.status).toBe("completed");
 		expect(result.retryable).toBe(false);
+		expect(ingestAiCreditUsageMock).toHaveBeenCalledTimes(1);
 		expect(logDecisionTimelineStateMock).toHaveBeenCalledTimes(2);
 		expect(logDecisionTimelineStateMock.mock.calls[0]?.[0]).toMatchObject({
 			state: "partial",
@@ -305,5 +376,139 @@ describe("runAiAgentPipeline retryability and typing cleanup", () => {
 		});
 		expect(typingHeartbeatStopMock).toHaveBeenCalledTimes(1);
 		expect(emitTypingStopMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("skips before generation when credit guard blocks", async () => {
+		const { runAiAgentPipeline } = await pipelineModulePromise;
+		guardAiCreditRunMock.mockResolvedValue({
+			allowed: false,
+			mode: "normal",
+			reason: "Insufficient AI credits",
+			blockedReason: "insufficient_credits",
+			minimumCharge: {
+				baseCredits: 1,
+				modelCredits: 1,
+				toolCredits: 0,
+				totalCredits: 2,
+				billableToolCount: 0,
+				excludedToolCount: 0,
+				totalToolCount: 0,
+			},
+			balance: 0,
+			meterBacked: true,
+			meterSource: "live",
+			lastSyncedAt: new Date().toISOString(),
+		});
+
+		const result = await runAiAgentPipeline({
+			db: {} as never,
+			input: {
+				conversationId: "conv-1",
+				messageId: "trigger-msg-1",
+				messageCreatedAt: new Date().toISOString(),
+				websiteId: "site-1",
+				organizationId: "org-1",
+				visitorId: "visitor-1",
+				aiAgentId: "ai-1",
+				workflowRunId: "workflow-guard-block",
+				jobId: "job-guard-block",
+			},
+		});
+
+		expect(result.status).toBe("skipped");
+		expect(result.reason).toContain("AI credit guard blocked run");
+		expect(generateMock).not.toHaveBeenCalled();
+		expect(ingestAiCreditUsageMock).not.toHaveBeenCalled();
+		expect(logAiCreditUsageTimelineMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not fail pipeline when credit usage ingest returns failed", async () => {
+		const { runAiAgentPipeline } = await pipelineModulePromise;
+		ingestAiCreditUsageMock.mockImplementation(async () => ({
+			status: "failed",
+		}));
+		generateMock.mockResolvedValue({
+			decision: {
+				action: "skip",
+				reasoning: "nothing to send",
+				confidence: 0.8,
+			},
+			toolCalls: {
+				sendMessage: 0,
+				sendPrivateMessage: 0,
+			},
+			toolCallsByName: {
+				searchKnowledgeBase: 3,
+				sendMessage: 1,
+			},
+			totalToolCalls: 4,
+		});
+
+		const result = await runAiAgentPipeline({
+			db: {} as never,
+			input: {
+				conversationId: "conv-1",
+				messageId: "trigger-msg-1",
+				messageCreatedAt: new Date().toISOString(),
+				websiteId: "site-1",
+				organizationId: "org-1",
+				visitorId: "visitor-1",
+				aiAgentId: "ai-1",
+				workflowRunId: "workflow-ingest-fail",
+				jobId: "job-ingest-fail",
+			},
+		});
+
+		expect(result.status).toBe("completed");
+		expect(ingestAiCreditUsageMock).toHaveBeenCalledTimes(1);
+		expect(logAiCreditUsageTimelineMock).toHaveBeenCalledTimes(1);
+		expect(logAiCreditUsageTimelineMock.mock.calls[0]?.[0]).toMatchObject({
+			payload: {
+				ingestStatus: "failed",
+				modelId: "moonshotai/kimi-k2-0905",
+				modelIdOriginal: "moonshotai/kimi-k2-0905",
+				modelMigrationApplied: false,
+			},
+		});
+	});
+
+	it("logs backoff ingest status when metering is temporarily throttled", async () => {
+		const { runAiAgentPipeline } = await pipelineModulePromise;
+		ingestAiCreditUsageMock.mockResolvedValue({
+			status: "skipped_backoff",
+		});
+		generateMock.mockResolvedValue({
+			decision: {
+				action: "skip",
+				reasoning: "nothing to send",
+				confidence: 0.8,
+			},
+			toolCalls: {
+				sendMessage: 0,
+				sendPrivateMessage: 0,
+			},
+		});
+
+		const result = await runAiAgentPipeline({
+			db: {} as never,
+			input: {
+				conversationId: "conv-1",
+				messageId: "trigger-msg-1",
+				messageCreatedAt: new Date().toISOString(),
+				websiteId: "site-1",
+				organizationId: "org-1",
+				visitorId: "visitor-1",
+				aiAgentId: "ai-1",
+				workflowRunId: "workflow-ingest-backoff",
+				jobId: "job-ingest-backoff",
+			},
+		});
+
+		expect(result.status).toBe("completed");
+		expect(logAiCreditUsageTimelineMock.mock.calls.at(-1)?.[0]).toMatchObject({
+			payload: {
+				ingestStatus: "skipped_backoff",
+			},
+		});
 	});
 });

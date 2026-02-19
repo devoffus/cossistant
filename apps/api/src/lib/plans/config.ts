@@ -19,6 +19,7 @@ export type FeatureKey =
 	| "ai-workflows"
 	| "ai-credit"
 	| "latest-ai-models"
+	| "custom-ai-skills"
 	| "ai-support-agents"
 	| "ai-agent-training-links"
 	| "ai-agent-training-mb"
@@ -155,8 +156,8 @@ export const FEATURE_CONFIG: Record<FeatureKey, FeatureConfig> = {
 	},
 	"ai-workflows": {
 		key: "ai-workflows",
-		name: "AI Workflows",
-		description: "Automated AI-powered workflows",
+		name: "Custom Workflows",
+		description: "Build automated workflows for your AI support operations",
 		category: "secondary",
 		comingSoon: true,
 	},
@@ -166,14 +167,19 @@ export const FEATURE_CONFIG: Record<FeatureKey, FeatureConfig> = {
 		description: "Credits for AI-powered features and workflows",
 		unit: "credits per month",
 		category: "secondary",
-		comingSoon: true,
 	},
 	"latest-ai-models": {
 		key: "latest-ai-models",
 		name: "Latest AI Models",
 		description: "Access to the latest AI models",
 		category: "secondary",
-		comingSoon: true,
+	},
+	"custom-ai-skills": {
+		key: "custom-ai-skills",
+		name: "Custom AI Skills",
+		description:
+			"Create and use custom AI skills tailored to your support workflows",
+		category: "secondary",
 	},
 	"ai-support-agents": {
 		key: "ai-support-agents",
@@ -181,7 +187,6 @@ export const FEATURE_CONFIG: Record<FeatureKey, FeatureConfig> = {
 		description: "Number of AI-powered support agents you can configure",
 		unit: "agents",
 		category: "secondary",
-		comingSoon: true,
 	},
 	"ai-agent-training-links": {
 		key: "ai-agent-training-links",
@@ -241,16 +246,28 @@ const POLAR_PRODUCT_IDS: Record<
 	{ sandbox: string; production?: string }
 > = {
 	free: {
-		sandbox: "", // Free plan doesn't have a product
-		production: "",
+		sandbox:
+			env.POLAR_PRODUCT_ID_FREE_SANDBOX ||
+			"4543a3c8-bbf6-47e2-84f6-0d78b334b15a",
+		production:
+			env.POLAR_PRODUCT_ID_FREE_PRODUCTION ||
+			"4bdd01d7-6092-48ab-8589-0666ffab18fc",
 	},
 	hobby: {
-		sandbox: "b060ff1e-c2dd-4c02-a3e4-395d7cce84a0",
-		production: "758ff687-1254-422f-9b4a-b23d39c6b47e",
+		sandbox:
+			env.POLAR_PRODUCT_ID_HOBBY_SANDBOX ||
+			"b060ff1e-c2dd-4c02-a3e4-395d7cce84a0",
+		production:
+			env.POLAR_PRODUCT_ID_HOBBY_PRODUCTION ||
+			"758ff687-1254-422f-9b4a-b23d39c6b47e",
 	},
 	pro: {
-		sandbox: "c87aa036-2f0b-40da-9338-1a1fcc191543",
-		production: "f34bf87c-96ab-4e54-9167-c4de8527669a",
+		sandbox:
+			env.POLAR_PRODUCT_ID_PRO_SANDBOX ||
+			"c87aa036-2f0b-40da-9338-1a1fcc191543",
+		production:
+			env.POLAR_PRODUCT_ID_PRO_PRODUCTION ||
+			"f34bf87c-96ab-4e54-9167-c4de8527669a",
 	},
 };
 
@@ -264,6 +281,8 @@ export const PLAN_CONFIG: Record<PlanName, PlanConfig> = {
 	free: {
 		name: "free",
 		displayName: "Free",
+		polarProductId: getPolarProductId("free"),
+		polarProductName: "Free",
 		features: {
 			conversations: 50, // Limited conversations
 			messages: 500, // Limited messages
@@ -281,9 +300,10 @@ export const PLAN_CONFIG: Record<PlanName, PlanConfig> = {
 			"self-host": true, // Included
 			"custom-events": true, // Included
 			"ai-workflows": true, // Included (coming soon)
-			"ai-credit": 100, // Limited AI credits (coming soon)
+			"ai-credit": 50, // Limited AI credits
 			"latest-ai-models": false, // Paid only
-			"ai-support-agents": 1, // 1 AI agent (coming soon)
+			"custom-ai-skills": true, // Included
+			"ai-support-agents": 1, // 1 AI agent
 			"ai-agent-training-links": 10, // 10 training links
 			"ai-agent-training-mb": 0.5, // 0.5 MB KB size
 			"ai-agent-crawl-pages-per-source": 10, // 10 pages per crawl
@@ -318,9 +338,10 @@ export const PLAN_CONFIG: Record<PlanName, PlanConfig> = {
 			"self-host": true, // Included
 			"custom-events": true, // Included
 			"ai-workflows": true, // Included (coming soon)
-			"ai-credit": 1000, // Higher AI credits (coming soon)
+			"ai-credit": 1000, // Higher AI credits
 			"latest-ai-models": true, // Included
-			"ai-support-agents": 5, // 5 AI agents (coming soon)
+			"custom-ai-skills": true, // Included
+			"ai-support-agents": 1, // 1 AI agent
 			"ai-agent-training-links": null, // Unlimited training links
 			"ai-agent-training-mb": 10, // 10 MB KB size
 			"ai-agent-crawl-pages-per-source": 1000, // 1000 pages per crawl
@@ -355,9 +376,10 @@ export const PLAN_CONFIG: Record<PlanName, PlanConfig> = {
 			"self-host": true, // Included
 			"custom-events": true, // Included
 			"ai-workflows": true, // Included (coming soon)
-			"ai-credit": 3000, // Triple AI credits (coming soon)
+			"ai-credit": 3000, // Triple AI credits
 			"latest-ai-models": true, // Included
-			"ai-support-agents": 15, // Triple AI agents (coming soon)
+			"custom-ai-skills": true, // Included
+			"ai-support-agents": 1, // 1 AI agent
 			"ai-agent-training-links": null, // Unlimited training links
 			"ai-agent-training-mb": 40, // 40 MB KB size
 			"ai-agent-crawl-pages-per-source": 1000, // 1000 pages per crawl

@@ -13,13 +13,14 @@
  */
 
 import type { Database } from "@api/db";
-import { getAiAgentById } from "@api/db/queries/ai-agent";
+import { getAiAgentById, updateAiAgentModel } from "@api/db/queries/ai-agent";
 import {
 	getConversationById,
 	getMessageMetadata,
 } from "@api/db/queries/conversation";
 import type { AiAgentSelect } from "@api/db/schema/ai-agent";
 import type { ConversationSelect } from "@api/db/schema/conversation";
+import { resolveModelForExecution } from "@api/lib/ai-credits/config";
 import {
 	buildConversationHistory,
 	type RoleAwareMessage,
@@ -32,6 +33,11 @@ export type IntakeResult =
 	| {
 			status: "ready";
 			aiAgent: AiAgentSelect;
+			modelResolution: {
+				modelIdOriginal: string;
+				modelIdResolved: string;
+				modelMigrationApplied: boolean;
+			};
 			conversation: ConversationSelect;
 			conversationHistory: RoleAwareMessage[];
 			visitorContext: VisitorContext | null;
@@ -65,6 +71,44 @@ export async function intake(
 			status: "skipped",
 			reason: `AI agent ${input.aiAgentId} is not active`,
 		};
+	}
+
+	const modelResolution = resolveModelForExecution(aiAgent.model);
+	let resolvedAiAgent = aiAgent;
+	if (modelResolution.modelMigrationApplied) {
+		console.warn(
+			`[ai-agent:intake] conv=${input.conversationId} | Migrating unknown AI model to default`,
+			{
+				aiAgentId: aiAgent.id,
+				modelIdOriginal: modelResolution.modelIdOriginal,
+				modelIdResolved: modelResolution.modelIdResolved,
+				migrationApplied: true,
+			}
+		);
+
+		try {
+			const persisted = await updateAiAgentModel(db, {
+				aiAgentId: aiAgent.id,
+				model: modelResolution.modelIdResolved,
+			});
+			if (persisted) {
+				resolvedAiAgent = persisted;
+			} else {
+				resolvedAiAgent = {
+					...aiAgent,
+					model: modelResolution.modelIdResolved,
+				};
+			}
+		} catch (error) {
+			console.warn(
+				`[ai-agent:intake] conv=${input.conversationId} | Failed to persist migrated AI model`,
+				error
+			);
+			resolvedAiAgent = {
+				...aiAgent,
+				model: modelResolution.modelIdResolved,
+			};
+		}
 	}
 
 	// Load conversation
@@ -119,12 +163,13 @@ export async function intake(
 		null;
 
 	console.log(
-		`[ai-agent:intake] conv=${input.conversationId} | messages=${conversationHistory.length} | hasVisitor=${!!visitorContext} | trigger=${triggerMessage?.senderType ?? "unknown"}`
+		`[ai-agent:intake] conv=${input.conversationId} | messages=${conversationHistory.length} | hasVisitor=${!!visitorContext} | trigger=${triggerMessage?.senderType ?? "unknown"} | modelOriginal=${modelResolution.modelIdOriginal} | modelResolved=${modelResolution.modelIdResolved} | migration=${modelResolution.modelMigrationApplied}`
 	);
 
 	return {
 		status: "ready",
-		aiAgent,
+		aiAgent: resolvedAiAgent,
+		modelResolution,
 		conversation,
 		conversationHistory,
 		visitorContext,

@@ -75,4 +75,22 @@ export const env = {
 	BULL_BOARD_TOKEN: getEnvVariable("WORKERS_BULL_BOARD_TOKEN", ""),
 	// Firecrawl API key for web crawling
 	FIRECRAWL_API_KEY: getEnvVariable("FIRECRAWL_API_KEY", ""),
+	// Polar AI credits meter configuration
+	POLAR_AI_USAGE_METER_ID: getEnvVariable("POLAR_AI_USAGE_METER_ID", ""),
+	AI_CREDIT_USAGE_EVENT_NAME: getEnvVariable(
+		"AI_CREDIT_USAGE_EVENT_NAME",
+		"ai_usage"
+	),
+	AI_CREDIT_BALANCE_CACHE_TTL_SECONDS: +getEnvVariable(
+		"AI_CREDIT_BALANCE_CACHE_TTL_SECONDS",
+		"15"
+	),
+	AI_CREDIT_BALANCE_STALE_TTL_SECONDS: +getEnvVariable(
+		"AI_CREDIT_BALANCE_STALE_TTL_SECONDS",
+		"300"
+	),
+	AI_CREDIT_INGEST_BACKOFF_SECONDS: +getEnvVariable(
+		"AI_CREDIT_INGEST_BACKOFF_SECONDS",
+		"30"
+	),
 };

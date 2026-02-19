@@ -6,55 +6,9 @@ import {
 } from "./ai-agent-capabilities";
 
 /**
- * Available AI models from OpenRouter
+ * Model selection options are API-canonical and returned by `plan.getPlanInfo.aiModels`.
+ * Keep request/response schemas generic to avoid hard-coded frontend model policy drift.
  */
-export const AI_MODELS = [
-	{
-		value: "moonshotai/kimi-k2-0905",
-		label: "Kimi K2",
-		provider: "Moonshot AI",
-		icon: "agent",
-		freeOnly: true,
-	},
-	{
-		value: "moonshotai/kimi-k2.5",
-		label: "Kimi K2.5",
-		provider: "Moonshot AI",
-		icon: "agent",
-		freeOnly: true,
-	},
-	{
-		value: "openai/gpt-5.2-chat",
-		label: "GPT-5.2",
-		provider: "OpenAI",
-		icon: "star",
-		requiresPaid: true,
-	},
-	{
-		value: "openai/gpt-5.1-chat",
-		label: "GPT-5.1",
-		provider: "OpenAI",
-		icon: "star",
-		requiresPaid: true,
-	},
-	{
-		value: "openai/gpt-5-mini",
-		label: "GPT-5 Mini",
-		provider: "OpenAI",
-		icon: "star",
-		requiresPaid: true,
-	},
-	{
-		value: "google/gemini-3-flash-preview",
-		label: "Gemini 3 Flash",
-		provider: "Google",
-		icon: "dashboard",
-		requiresPaid: true,
-	},
-] as const;
-
-export type AIModel = (typeof AI_MODELS)[number]["value"];
-export type AIModelConfig = (typeof AI_MODELS)[number];
 
 /**
  * Available AI agent goals/intents
@@ -136,7 +90,7 @@ export const aiAgentResponseSchema = z.object({
 	}),
 	model: z.string().openapi({
 		description: "The OpenRouter model identifier.",
-		example: "anthropic/claude-sonnet-4-20250514",
+		example: "moonshotai/kimi-k2-0905",
 	}),
 	temperature: z.number().nullable().openapi({
 		description: "The temperature setting for response generation (0-2).",
@@ -217,7 +171,7 @@ export const createAiAgentRequestSchema = z
 			}),
 		model: z.string().min(1, { message: "Model is required." }).openapi({
 			description: "The OpenRouter model identifier.",
-			example: "anthropic/claude-sonnet-4-20250514",
+			example: "moonshotai/kimi-k2-0905",
 		}),
 		temperature: z
 			.number()
@@ -291,7 +245,7 @@ export const updateAiAgentRequestSchema = z
 			}),
 		model: z.string().min(1, { message: "Model is required." }).openapi({
 			description: "The OpenRouter model identifier.",
-			example: "anthropic/claude-sonnet-4-20250514",
+			example: "moonshotai/kimi-k2-0905",
 		}),
 		temperature: z
 			.number()

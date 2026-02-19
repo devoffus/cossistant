@@ -67,6 +67,10 @@ export type GenerationResult = {
 		sendMessage: number;
 		sendPrivateMessage: number;
 	};
+	/** Full per-tool call counts from this generation */
+	toolCallsByName?: Record<string, number>;
+	/** Total number of tool calls from this generation */
+	totalToolCalls?: number;
 };
 
 type GenerationInput = {
@@ -120,6 +124,76 @@ const MAIN_STOP_CONDITIONS = [
 ];
 
 const REPAIR_STOP_CONDITIONS = [hasToolCall("respond"), stepCountIs(3)];
+
+type ToolCallLike = {
+	toolName?: string;
+};
+
+export function buildToolCallsByName(
+	toolCalls: ToolCallLike[]
+): Record<string, number> {
+	const counts: Record<string, number> = {};
+
+	for (const toolCall of toolCalls) {
+		if (!(toolCall?.toolName && typeof toolCall.toolName === "string")) {
+			continue;
+		}
+
+		counts[toolCall.toolName] = (counts[toolCall.toolName] ?? 0) + 1;
+	}
+
+	return counts;
+}
+
+export function getTotalToolCalls(
+	toolCallsByName: Record<string, number>
+): number {
+	return Object.values(toolCallsByName).reduce((sum, value) => {
+		if (!Number.isFinite(value) || value <= 0) {
+			return sum;
+		}
+
+		return sum + Math.floor(value);
+	}, 0);
+}
+
+export function mergeToolCallsByName(
+	...toolCallMaps: Array<Record<string, number> | undefined>
+): Record<string, number> {
+	const merged: Record<string, number> = {};
+
+	for (const toolCallMap of toolCallMaps) {
+		if (!toolCallMap) {
+			continue;
+		}
+
+		for (const [toolName, rawCount] of Object.entries(toolCallMap)) {
+			if (!Number.isFinite(rawCount) || rawCount <= 0) {
+				continue;
+			}
+			merged[toolName] = (merged[toolName] ?? 0) + Math.floor(rawCount);
+		}
+	}
+
+	return merged;
+}
+
+function buildToolCallsByNameFromCounters(
+	counters: ToolContext["counters"] | undefined
+): Record<string, number> {
+	const sendMessage = counters?.sendMessage ?? 0;
+	const sendPrivateMessage = counters?.sendPrivateMessage ?? 0;
+	const byName: Record<string, number> = {};
+
+	if (sendMessage > 0) {
+		byName.sendMessage = sendMessage;
+	}
+	if (sendPrivateMessage > 0) {
+		byName.sendPrivateMessage = sendPrivateMessage;
+	}
+
+	return byName;
+}
 
 async function generateWithToolLoopAgent(input: {
 	modelId: string;
@@ -229,6 +303,9 @@ export async function generate(
 	// Get tools for this agent based on settings (with bound context)
 	const tools = getToolsForGeneration(aiAgent, toolContext);
 	if (!tools) {
+		const toolCallsByName = buildToolCallsByNameFromCounters(
+			toolContext.counters
+		);
 		return {
 			decision: {
 				action: "skip",
@@ -239,6 +316,8 @@ export async function generate(
 				sendMessage: 0,
 				sendPrivateMessage: 0,
 			},
+			toolCallsByName,
+			totalToolCalls: getTotalToolCalls(toolCallsByName),
 		};
 	}
 
@@ -390,6 +469,9 @@ export async function generate(
 			console.log(
 				`[ai-agent:generate] conv=${convId} | Generation aborted - new message arrived`
 			);
+			const toolCallsByName = buildToolCallsByNameFromCounters(
+				toolContext.counters
+			);
 			return {
 				decision: {
 					action: "skip" as const,
@@ -401,6 +483,8 @@ export async function generate(
 					sendMessage: toolContext.counters?.sendMessage ?? 0,
 					sendPrivateMessage: toolContext.counters?.sendPrivateMessage ?? 0,
 				},
+				toolCallsByName,
+				totalToolCalls: getTotalToolCalls(toolCallsByName),
 			};
 		}
 		// Re-throw other errors
@@ -410,6 +494,8 @@ export async function generate(
 	// Log tool call information for debugging
 	const allToolCalls =
 		result.steps?.flatMap((step) => step.toolCalls ?? []) ?? [];
+	const toolCallsByName = buildToolCallsByName(allToolCalls);
+	const totalToolCalls = getTotalToolCalls(toolCallsByName);
 	const sendMessageCalls = allToolCalls.filter(
 		(tc) => tc.toolName === "sendMessage"
 	);
@@ -489,6 +575,13 @@ export async function generate(
 					console.log(
 						`[ai-agent:generate] conv=${convId} | Repair aborted - new message arrived`
 					);
+					const repairAbortToolCallsByName = buildToolCallsByNameFromCounters(
+						toolContext.counters
+					);
+					const combinedRepairAbortToolCallsByName = mergeToolCallsByName(
+						toolCallsByName,
+						repairAbortToolCallsByName
+					);
 					return {
 						decision: {
 							action: "skip" as const,
@@ -497,9 +590,14 @@ export async function generate(
 						},
 						aborted: true,
 						toolCalls: {
-							sendMessage: toolContext.counters?.sendMessage ?? 0,
-							sendPrivateMessage: toolContext.counters?.sendPrivateMessage ?? 0,
+							sendMessage: combinedRepairAbortToolCallsByName.sendMessage ?? 0,
+							sendPrivateMessage:
+								combinedRepairAbortToolCallsByName.sendPrivateMessage ?? 0,
 						},
+						toolCallsByName: combinedRepairAbortToolCallsByName,
+						totalToolCalls: getTotalToolCalls(
+							combinedRepairAbortToolCallsByName
+						),
 					};
 				}
 				throw error;
@@ -507,18 +605,24 @@ export async function generate(
 
 			const repairToolCalls =
 				repairResult.steps?.flatMap((step) => step.toolCalls ?? []) ?? [];
-			const repairSendMessageCalls = repairToolCalls.filter(
-				(tc) => tc.toolName === "sendMessage"
+			const repairToolCallsByName = buildToolCallsByName(repairToolCalls);
+			const combinedRepairToolCallsByName = mergeToolCallsByName(
+				toolCallsByName,
+				repairToolCallsByName
 			);
-			const repairSendPrivateMessageCalls = repairToolCalls.filter(
-				(tc) => tc.toolName === "sendPrivateMessage"
+			const repairTotalToolCalls = getTotalToolCalls(
+				combinedRepairToolCallsByName
 			);
+			const repairSendMessageCalls =
+				combinedRepairToolCallsByName.sendMessage ?? 0;
+			const repairSendPrivateMessageCalls =
+				combinedRepairToolCallsByName.sendPrivateMessage ?? 0;
 
 			const repairAction = getCapturedAction(actionCapture);
 			const repairSucceeded = Boolean(
 				repairAction &&
 					repairAction.action === "respond" &&
-					repairSendMessageCalls.length > 0
+					repairSendMessageCalls > 0
 			);
 
 			if (repairSucceeded && repairAction) {
@@ -533,9 +637,11 @@ export async function generate(
 							}
 						: undefined,
 					toolCalls: {
-						sendMessage: repairSendMessageCalls.length,
-						sendPrivateMessage: repairSendPrivateMessageCalls.length,
+						sendMessage: repairSendMessageCalls,
+						sendPrivateMessage: repairSendPrivateMessageCalls,
 					},
+					toolCallsByName: combinedRepairToolCallsByName,
+					totalToolCalls: repairTotalToolCalls,
 				};
 			}
 
@@ -557,9 +663,11 @@ export async function generate(
 						}
 					: undefined,
 				toolCalls: {
-					sendMessage: repairSendMessageCalls.length,
-					sendPrivateMessage: repairSendPrivateMessageCalls.length,
+					sendMessage: repairSendMessageCalls,
+					sendPrivateMessage: repairSendPrivateMessageCalls,
 				},
+				toolCallsByName: combinedRepairToolCallsByName,
+				totalToolCalls: repairTotalToolCalls,
 			};
 		}
 	}
@@ -589,6 +697,8 @@ export async function generate(
 				sendMessage: sendMessageCalls.length,
 				sendPrivateMessage: sendPrivateMessageCalls.length,
 			},
+			toolCallsByName,
+			totalToolCalls,
 		};
 	}
 
@@ -624,6 +734,8 @@ export async function generate(
 			sendMessage: sendMessageCalls.length,
 			sendPrivateMessage: sendPrivateMessageCalls.length,
 		},
+		toolCallsByName,
+		totalToolCalls,
 	};
 }
 

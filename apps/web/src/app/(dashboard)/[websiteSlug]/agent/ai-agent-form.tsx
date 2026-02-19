@@ -3,7 +3,7 @@
 import { AI_AGENT_TOOL_CATALOG, type AiAgentResponse } from "@cossistant/types";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -85,8 +85,6 @@ export function AIAgentForm({
 		trpc.plan.getPlanInfo.queryOptions({ websiteSlug })
 	);
 
-	const isFreePlan = planInfo?.plan.name === "free";
-
 	// Copy agent ID state
 	const [hasCopied, setHasCopied] = useState(false);
 
@@ -116,11 +114,40 @@ export function AIAgentForm({
 			basePrompt:
 				initialData?.basePrompt ??
 				"You are a helpful support assistant. Answer questions clearly and concisely. If you don't know something, say so honestly.",
-			model: initialData?.model ?? "anthropic/claude-sonnet-4-20250514",
+			model: initialData?.model ?? "",
 			temperature: initialData?.temperature ?? 0.7,
 			maxOutputTokens: initialData?.maxOutputTokens ?? 1024,
 		},
 	});
+
+	useEffect(() => {
+		if (initialData) {
+			return;
+		}
+
+		const defaultModelId = planInfo?.aiModels.defaultModelId;
+		const knownModels = planInfo?.aiModels.items;
+		if (!(defaultModelId && knownModels)) {
+			return;
+		}
+
+		const currentModel = form.getValues("model");
+		const isKnownCurrent = knownModels.some(
+			(modelItem) => modelItem.id === currentModel
+		);
+		if (!isKnownCurrent) {
+			form.setValue("model", defaultModelId, {
+				shouldDirty: false,
+				shouldTouch: false,
+				shouldValidate: true,
+			});
+		}
+	}, [
+		form,
+		initialData,
+		planInfo?.aiModels.defaultModelId,
+		planInfo?.aiModels.items,
+	]);
 
 	const { mutateAsync: createAgent, isPending: isCreating } = useMutation(
 		trpc.aiAgent.create.mutationOptions({
@@ -320,7 +347,6 @@ export function AIAgentForm({
 								<ModelSelect
 									description="The AI model to use for generating responses."
 									disabled={isPending}
-									isFreePlan={isFreePlan}
 									label="Model"
 									onChange={field.onChange}
 									planInfo={planInfo}

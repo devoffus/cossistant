@@ -1,7 +1,6 @@
 "use client";
 
 import type { AiAgentResponse } from "@cossistant/types";
-import { AI_MODELS } from "@cossistant/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
@@ -107,14 +106,30 @@ export function AgentOnboardingFlow({
 	const needsRegeneration =
 		existingAgent && !hasCustomPrompt && !promptWasGenerated;
 
-	// Default model - use first free model for free users, or first model overall
-	const defaultModel = isFreePlan
-		? (AI_MODELS.find((m) => "freeOnly" in m && m.freeOnly)?.value ??
-			AI_MODELS[0].value)
-		: AI_MODELS[0].value;
-	const [model, setModel] = useState<string>(
-		existingAgent?.model ?? defaultModel
-	);
+	const [model, setModel] = useState<string>(existingAgent?.model ?? "");
+
+	useEffect(() => {
+		if (existingAgent) {
+			return;
+		}
+
+		const nextDefaultModel = planInfo?.aiModels.defaultModelId;
+		const knownModels = planInfo?.aiModels.items;
+		if (!(nextDefaultModel && knownModels)) {
+			return;
+		}
+
+		setModel((currentModel) => {
+			const isKnownCurrent = knownModels.some(
+				(modelItem) => modelItem.id === currentModel
+			);
+			return isKnownCurrent ? currentModel : nextDefaultModel;
+		});
+	}, [
+		existingAgent,
+		planInfo?.aiModels.defaultModelId,
+		planInfo?.aiModels.items,
+	]);
 
 	// Create AI agent mutation with optimistic update
 	const { mutateAsync: createAgent, isPending: isCreatingAgent } = useMutation(
@@ -299,6 +314,22 @@ export function AgentOnboardingFlow({
 			return;
 		}
 
+		const modelCatalog = planInfo?.aiModels.items;
+		const defaultModelId = planInfo?.aiModels.defaultModelId;
+		const modelForCreate =
+			modelCatalog?.some((modelItem) => modelItem.id === model) === true
+				? model
+				: (defaultModelId ?? null);
+
+		if (!modelForCreate) {
+			toast.error("AI models are still loading. Please try again in a moment.");
+			return;
+		}
+
+		if (modelForCreate !== model) {
+			setModel(modelForCreate);
+		}
+
 		const willCrawl = crawlEnabled && isUrlValid && sourceUrl.trim().length > 0;
 		setUrlWasProvided(willCrawl);
 
@@ -308,7 +339,7 @@ export function AgentOnboardingFlow({
 				websiteSlug: website.slug,
 				name: name.trim(),
 				basePrompt: DEFAULT_BASE_PROMPT,
-				model: defaultModel,
+				model: modelForCreate,
 				goals: selectedGoals.length > 0 ? selectedGoals : undefined,
 			});
 

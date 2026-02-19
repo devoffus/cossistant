@@ -7,9 +7,11 @@ import {
 	type PlanName,
 } from "./config";
 import {
-	getCustomerStateByOrganizationId,
+	getCustomerByOrganizationId,
+	getCustomerState,
 	getPlanFromCustomerState,
 	getSubscriptionForWebsite,
+	PolarCustomerInvariantViolationError,
 } from "./polar";
 
 type Website = typeof website.$inferSelect;
@@ -75,10 +77,12 @@ export async function getPlanForWebsite(_website: Website): Promise<PlanInfo> {
 	const stalePlan = cached?.plan ?? null;
 
 	try {
-		// Get customer state from Polar using organization ID
-		const customerState = await getCustomerStateByOrganizationId(
-			_website.organizationId
-		);
+		const customer = await getCustomerByOrganizationId(_website.organizationId);
+		if (!customer) {
+			throw new PolarCustomerInvariantViolationError(_website.organizationId);
+		}
+
+		const customerState = await getCustomerState(customer.id);
 
 		// Find subscription for this specific website
 		const websiteSubscription = getSubscriptionForWebsite(

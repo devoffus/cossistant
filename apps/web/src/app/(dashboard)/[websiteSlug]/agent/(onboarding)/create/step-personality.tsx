@@ -123,7 +123,6 @@ export function StepPersonality({
 					<ModelSelect
 						description="The AI model powering your agent's responses"
 						disabled={isSubmitting}
-						isFreePlan={isFreePlan}
 						label="AI Model"
 						onChange={setModel}
 						planInfo={planInfo}
@@ -149,7 +148,7 @@ export function StepPersonality({
 					{/* Finish Button */}
 					<div className="flex justify-end pt-2">
 						<Button
-							disabled={isSubmitting || !basePrompt.trim()}
+							disabled={isSubmitting || !basePrompt.trim() || !model.trim()}
 							onClick={onFinish}
 							type="button"
 						>

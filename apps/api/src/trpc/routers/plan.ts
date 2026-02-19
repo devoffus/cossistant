@@ -9,6 +9,9 @@ import { getWebsiteBySlugWithAccess } from "@api/db/queries/website";
 import { member } from "@api/db/schema/auth";
 import { website } from "@api/db/schema/website";
 import { env } from "@api/env";
+import { getAiModelsForPlan } from "@api/lib/ai-credits/config";
+import { resolveAiCreditsView } from "@api/lib/ai-credits/plan-view";
+import { getAiCreditMeterState } from "@api/lib/ai-credits/polar-meter";
 import {
 	getDashboardConversationLockCutoff,
 	resolveDashboardHardLimitPolicy,
@@ -24,12 +27,21 @@ import {
 	getCustomerState,
 	getPlanFromCustomerState,
 	getSubscriptionForWebsite,
+	normalizeWebsiteSubscriptions,
+	requireCustomerByOrganizationId,
+	updateWebsiteSubscriptionProduct,
 } from "@api/lib/plans/polar";
 import polarClient from "@api/lib/polar";
 import { TRPCError } from "@trpc/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../init";
+
+export function buildAiModelsForPlanInfo(params: {
+	latestModelsFeature: unknown;
+}) {
+	return getAiModelsForPlan(params.latestModelsFeature);
+}
 
 export const planRouter = createTRPCRouter({
 	getPublicDiscountInfo: publicProcedure
@@ -87,6 +99,7 @@ export const planRouter = createTRPCRouter({
 				contacts,
 				teamMembers,
 				conversationLockCutoff,
+				aiCreditMeterState,
 			] = await Promise.all([
 				getRollingWindowMessageCount(ctx.db, {
 					websiteId: websiteData.id,
@@ -111,7 +124,16 @@ export const planRouter = createTRPCRouter({
 					organizationId: websiteData.organizationId,
 					policy: hardLimitPolicy,
 				}),
+				getAiCreditMeterState(websiteData.organizationId),
 			]);
+
+			const aiCredits = resolveAiCreditsView({
+				planInfo,
+				meterState: aiCreditMeterState,
+			});
+			const aiModels = buildAiModelsForPlanInfo({
+				latestModelsFeature: planInfo.features["latest-ai-models"],
+			});
 
 			const messagesReached =
 				hardLimitPolicy.messageLimit !== null
@@ -157,6 +179,8 @@ export const planRouter = createTRPCRouter({
 							: null,
 					},
 				},
+				aiCredits,
+				aiModels,
 			};
 		}),
 	getPlansForOrganization: protectedProcedure
@@ -207,13 +231,14 @@ export const planRouter = createTRPCRouter({
 			const customer = await getCustomerByOrganizationId(input.organizationId);
 
 			if (!customer) {
-				// No customer means all websites are on free plan
-				const freePlan = getPlanConfig("free");
-				return websites.map((site) => ({
-					websiteId: site.id,
-					planName: "free" as PlanName,
-					displayName: freePlan.displayName,
-				}));
+				console.error("[plans] Missing Polar customer invariant violation", {
+					organizationId: input.organizationId,
+					websiteCount: websites.length,
+				});
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message: "Billing customer is missing. Please contact support.",
+				});
 			}
 
 			const customerState = await getCustomerState(customer.id);
@@ -303,51 +328,103 @@ export const planRouter = createTRPCRouter({
 					message: `Plan ${targetPlan} does not have a Polar product ID configured`,
 				});
 			}
+			const targetProductId = targetPlanConfig.polarProductId;
 
-			// Get customer by organization ID (customer should exist from organization creation)
-			const customer = await getCustomerByOrganizationId(
-				websiteData.organizationId
-			);
-
-			if (!customer) {
-				throw new TRPCError({
-					code: "INTERNAL_SERVER_ERROR",
-					message: "Customer not found. Please contact support.",
-				});
-			}
-
-			// Create checkout session
 			try {
-				const baseUrl = env.PUBLIC_APP_URL || "http://localhost:3000";
-				const returnPath = `/${input.websiteSlug}/settings/plan`;
-
-				const checkoutParams: {
-					products: string[];
-					externalCustomerId: string;
-					metadata: { websiteId: string };
-					successUrl: string;
-					failureUrl: string;
-				} = {
-					products: [targetPlanConfig.polarProductId],
-					externalCustomerId: websiteData.organizationId,
-					metadata: {
-						websiteId: websiteData.id,
-					},
-					successUrl: `${baseUrl}${returnPath}?checkout_success=true`,
-					failureUrl: `${baseUrl}${returnPath}?checkout_error=true`,
-				};
-
-				const checkout = await polarClient.checkouts.create(checkoutParams);
-
-				return {
-					checkoutUrl: checkout.url,
-				};
+				await requireCustomerByOrganizationId(websiteData.organizationId);
 			} catch (error) {
-				console.error("Error creating checkout:", error);
+				console.error("[plans] Missing Polar customer invariant violation", {
+					organizationId: websiteData.organizationId,
+					websiteId: websiteData.id,
+					targetPlan,
+					error,
+				});
 				throw new TRPCError({
 					code: "INTERNAL_SERVER_ERROR",
-					message: "Failed to create checkout session",
+					message: "Billing customer is missing. Please contact support.",
 				});
 			}
+
+			const createCheckoutSession = async () => {
+				try {
+					const baseUrl = env.PUBLIC_APP_URL || "http://localhost:3000";
+					const returnPath = `/${input.websiteSlug}/settings/plan`;
+					const checkout = await polarClient.checkouts.create({
+						products: [targetProductId],
+						externalCustomerId: websiteData.organizationId,
+						metadata: {
+							websiteId: websiteData.id,
+						},
+						successUrl: `${baseUrl}${returnPath}?checkout_success=true`,
+						returnUrl: `${baseUrl}${returnPath}?checkout_error=true`,
+					});
+
+					return {
+						mode: "checkout" as const,
+						checkoutUrl: checkout.url,
+					};
+				} catch (error) {
+					console.error("Error creating checkout:", error);
+					throw new TRPCError({
+						code: "INTERNAL_SERVER_ERROR",
+						message: "Failed to create checkout session",
+					});
+				}
+			};
+
+			const normalized = await normalizeWebsiteSubscriptions({
+				organizationId: websiteData.organizationId,
+				websiteId: websiteData.id,
+			});
+
+			if (normalized.revokedSubscriptionIds.length > 0) {
+				console.warn("[plans] Revoked duplicate active subscriptions", {
+					organizationId: websiteData.organizationId,
+					websiteId: websiteData.id,
+					keptSubscriptionId: normalized.subscription?.id ?? null,
+					revokedSubscriptionIds: normalized.revokedSubscriptionIds,
+				});
+			}
+
+			if (!normalized.subscription) {
+				return createCheckoutSession();
+			}
+
+			const updateResult = await updateWebsiteSubscriptionProduct({
+				subscriptionId: normalized.subscription.id,
+				productId: targetProductId,
+				prorationBehavior: "invoice",
+			});
+
+			if (updateResult.status === "updated") {
+				return {
+					mode: "updated" as const,
+				};
+			}
+
+			if (updateResult.status === "payment_required") {
+				return createCheckoutSession();
+			}
+
+			if (updateResult.status === "not_found") {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message:
+						"Current subscription could not be updated because it no longer exists in Polar.",
+				});
+			}
+
+			if (updateResult.status === "config_error") {
+				throw new TRPCError({
+					code: "INTERNAL_SERVER_ERROR",
+					message:
+						"Target plan product is misconfigured in Polar. Please contact support.",
+				});
+			}
+
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Failed to update subscription plan",
+			});
 		}),
 });

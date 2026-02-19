@@ -21,6 +21,10 @@ import {
 	website,
 } from "@api/db/schema";
 import { env } from "@api/env";
+import {
+	ensureFreeSubscriptionForWebsite,
+	PolarCustomerInvariantViolationError,
+} from "@api/lib/plans/polar";
 import { generateTinybirdJWT } from "@api/lib/tinybird-jwt";
 import { isOrganizationAdminOrOwner } from "@api/utils/access-control";
 import { invalidateApiKeyCacheForWebsite } from "@api/utils/cache/api-key-cache";
@@ -288,6 +292,43 @@ export const websiteRouter = createTRPCRouter({
 					createdBy: user.id,
 				}),
 			]);
+
+			try {
+				const freeProvisionResult = await ensureFreeSubscriptionForWebsite({
+					organizationId: input.organizationId,
+					websiteId: createdWebsite.id,
+				});
+
+				if (freeProvisionResult.status === "skipped_lock_contention") {
+					console.warn(
+						"[plans] Free subscription provisioning lock contention",
+						{
+							organizationId: input.organizationId,
+							websiteId: createdWebsite.id,
+						}
+					);
+				}
+
+				if (freeProvisionResult.revokedSubscriptionIds.length > 0) {
+					console.warn(
+						"[plans] Revoked duplicate subscriptions during free provisioning",
+						{
+							organizationId: input.organizationId,
+							websiteId: createdWebsite.id,
+							revokedSubscriptionIds:
+								freeProvisionResult.revokedSubscriptionIds,
+						}
+					);
+				}
+			} catch (error) {
+				console.error("[plans] Failed to provision free website subscription", {
+					organizationId: input.organizationId,
+					websiteId: createdWebsite.id,
+					invariantViolation:
+						error instanceof PolarCustomerInvariantViolationError,
+					error,
+				});
+			}
 
 			return {
 				id: createdWebsite.id,
