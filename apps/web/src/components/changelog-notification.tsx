@@ -63,7 +63,7 @@ export function ChangelogNotification({
 					className="rounded-sm p-0.5 text-primary/40 transition-colors hover:bg-background-300 hover:text-primary/80"
 					onClick={(e) => {
 						e.stopPropagation();
-						dismiss(version);
+						dismiss(id);
 					}}
 					type="button"
 				>
