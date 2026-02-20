@@ -13,6 +13,10 @@ type JoinStatusContentProps = {
 	invitedEmail: string | null;
 	signedInEmail: string | null;
 	canSwitchAccount: boolean;
+	isAccepting: boolean;
+	isRejecting: boolean;
+	onAccept: () => void;
+	onReject: () => void;
 	onRetry: () => void;
 	onSwitchAccount: () => void;
 };
@@ -41,9 +45,36 @@ export function JoinStatusContent({
 	invitedEmail,
 	signedInEmail,
 	canSwitchAccount,
+	isAccepting,
+	isRejecting,
+	onAccept,
+	onReject,
 	onRetry,
 	onSwitchAccount,
 }: JoinStatusContentProps) {
+	if (state === "idle") {
+		return (
+			<div className="space-y-4">
+				<p className="text-sm">
+					Accept this invitation to join your workspace, or decline it if it was
+					sent by mistake.
+				</p>
+				<div className="flex flex-wrap gap-2">
+					<Button disabled={isAccepting || isRejecting} onClick={onAccept}>
+						Accept invitation
+					</Button>
+					<Button
+						disabled={isAccepting || isRejecting}
+						onClick={onReject}
+						variant="outline"
+					>
+						Decline invitation
+					</Button>
+				</div>
+			</div>
+		);
+	}
+
 	if (state === "accepting") {
 		return (
 			<div className="flex items-center gap-2 text-sm">
@@ -53,15 +84,35 @@ export function JoinStatusContent({
 		);
 	}
 
+	if (state === "rejecting") {
+		return (
+			<div className="flex items-center gap-2 text-sm">
+				<Loader2Icon className="size-4 animate-spin" />
+				<span>Declining your invitation...</span>
+			</div>
+		);
+	}
+
 	if (state === "success") {
 		return (
 			<div className="space-y-3">
-				<p className="text-sm">
-					You&apos;re in. Redirecting to your workspace...
-				</p>
+				<p className="text-sm">You&apos;re in. Your access has been granted.</p>
 				<Button asChild>
 					<Link href="/select">Go to workspace</Link>
 				</Button>
+			</div>
+		);
+	}
+
+	if (state === "rejected") {
+		return (
+			<div className="space-y-4">
+				<p className="text-sm">You declined this invitation.</p>
+				<div className="flex flex-wrap gap-2">
+					<Button asChild>
+						<Link href="/select">Go to workspace</Link>
+					</Button>
+				</div>
 			</div>
 		);
 	}
@@ -107,6 +158,25 @@ export function JoinStatusContent({
 							Switch account
 						</Button>
 					) : null}
+				</div>
+			</div>
+		);
+	}
+
+	if (state === "email-verification-required") {
+		return (
+			<div className="space-y-4">
+				<p className="text-sm">
+					Verify your email before accepting or declining this invitation.
+				</p>
+				<p className="text-muted-foreground text-xs">
+					After verification, return to this page and try again.
+				</p>
+				<div className="flex flex-wrap gap-2">
+					<Button onClick={onRetry}>Try again</Button>
+					<Button asChild variant="outline">
+						<Link href="/select">Go to workspace</Link>
+					</Button>
 				</div>
 			</div>
 		);

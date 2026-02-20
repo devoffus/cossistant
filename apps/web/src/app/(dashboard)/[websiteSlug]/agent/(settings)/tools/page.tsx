@@ -15,12 +15,6 @@ import {
 	serializeSkillEditorContent,
 	toCanonicalSkillFileNameFromFrontmatterName,
 } from "@/components/agents/skills/tools-studio-utils";
-import {
-	Accordion,
-	AccordionContent,
-	AccordionItem,
-	AccordionTrigger,
-} from "@/components/ui/accordion";
 import { BaseSubmitButton } from "@/components/ui/base-submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useWebsite } from "@/contexts/website";
 import { useTRPC } from "@/lib/trpc/client";
+import { cn } from "@/lib/utils";
 
 type StudioTool = GetCapabilitiesStudioResponse["tools"][number];
 
@@ -238,6 +233,17 @@ export default function ToolsPage() {
 			),
 		[customSkillDrafts, customSkills]
 	);
+	const customSkillDisplayNameById = useMemo<Record<string, string>>(
+		() =>
+			Object.fromEntries(
+				customSkills.map((skill) => [
+					skill.id,
+					customSkillPreviewById[skill.id]?.name ??
+						normalizeSkillFrontmatterName(skill.name),
+				])
+			),
+		[customSkillPreviewById, customSkills]
+	);
 
 	const activeTool = useMemo(() => {
 		if (editorTarget?.kind !== "tool") {
@@ -400,20 +406,18 @@ export default function ToolsPage() {
 	}
 
 	const renderToolCard = (tool: StudioTool) => (
-		<Card className="border-border/60" key={tool.id}>
+		<Card
+			className={cn("relative border-border/60", {
+				"bg-cossistant-blue/5": tool.enabled,
+			})}
+			key={tool.id}
+		>
 			<CardHeader className="space-y-2 p-4">
 				<div className="flex items-start justify-between gap-3">
-					<div className="space-y-1">
-						<CardTitle className="text-base">{tool.label}</CardTitle>
-						<p className="text-muted-foreground text-xs">
-							{tool.isToggleable
-								? tool.enabled
-									? "Enabled"
-									: "Disabled"
-								: "Always on"}
-						</p>
+					<div>
+						<CardTitle className="text-sm">{tool.label}</CardTitle>
 					</div>
-					<div className="flex items-center gap-2">
+					<div className="absolute top-2 right-2 flex items-center gap-2">
 						{tool.isToggleable ? (
 							<Switch
 								aria-label={`Toggle ${tool.label}`}
@@ -423,9 +427,7 @@ export default function ToolsPage() {
 									void handleToggleTool(tool, checked)
 								}
 							/>
-						) : (
-							<span className="text-muted-foreground text-xs">Always on</span>
-						)}
+						) : null}
 						<Button
 							aria-label={`Edit ${tool.label} skill`}
 							disabled={isMutating}
@@ -441,12 +443,6 @@ export default function ToolsPage() {
 			</CardHeader>
 			<CardContent className="space-y-2 p-4 pt-0">
 				<p className="text-muted-foreground text-sm">{tool.description}</p>
-				<p className="text-muted-foreground text-xs">Skill: {tool.skillName}</p>
-				{tool.isToggleable && !tool.enabled ? (
-					<p className="text-muted-foreground text-xs">
-						This tool is disabled, so its attached skill is inactive.
-					</p>
-				) : null}
 			</CardContent>
 			{tool.skillHasOverride ? (
 				<CardFooter className="justify-end border-border/50 border-t p-4 pt-3">
@@ -476,11 +472,6 @@ export default function ToolsPage() {
 
 			return (
 				<div className="space-y-3 p-2">
-					<Input
-						aria-label="Tool skill file"
-						disabled={true}
-						value={activeTool.skillName}
-					/>
 					<Input
 						aria-label="Tool skill description"
 						disabled={isMutating}
@@ -615,7 +606,13 @@ export default function ToolsPage() {
 			return activeTool ? `${activeTool.label} skill` : "Tool skill";
 		}
 		if (editorTarget?.kind === "custom") {
-			return activeCustomSkill?.name ?? "Edit custom skill";
+			if (!activeCustomSkill) {
+				return "Edit custom skill";
+			}
+
+			return (
+				customSkillDisplayNameById[activeCustomSkill.id] ?? "Edit custom skill"
+			);
 		}
 		if (editorTarget?.kind === "create-custom") {
 			return "Create custom skill";
@@ -626,39 +623,34 @@ export default function ToolsPage() {
 	const modalFooter = (() => {
 		if (editorTarget?.kind === "tool" && activeTool) {
 			return (
-				<div className="flex w-full flex-wrap items-center justify-between gap-2">
-					<div className="text-muted-foreground text-xs">
-						File: {activeTool.skillName}
-					</div>
-					<div className="flex flex-wrap justify-end gap-2">
+				<div className="flex w-full flex-wrap justify-end gap-2">
+					<Button
+						onClick={() => setEditorTarget(null)}
+						size="sm"
+						type="button"
+						variant="ghost"
+					>
+						Close
+					</Button>
+					<BaseSubmitButton
+						isSubmitting={isMutating}
+						onClick={() => void handleSaveToolSkill(activeTool)}
+						size="sm"
+						type="button"
+					>
+						Save
+					</BaseSubmitButton>
+					{activeTool.skillHasOverride ? (
 						<Button
-							onClick={() => setEditorTarget(null)}
+							disabled={isMutating}
+							onClick={() => void handleResetToolSkill(activeTool)}
 							size="sm"
 							type="button"
-							variant="ghost"
+							variant="outline"
 						>
-							Close
+							Reset
 						</Button>
-						<BaseSubmitButton
-							isSubmitting={isMutating}
-							onClick={() => void handleSaveToolSkill(activeTool)}
-							size="sm"
-							type="button"
-						>
-							Save
-						</BaseSubmitButton>
-						{activeTool.skillHasOverride ? (
-							<Button
-								disabled={isMutating}
-								onClick={() => void handleResetToolSkill(activeTool)}
-								size="sm"
-								type="button"
-								variant="outline"
-							>
-								Reset
-							</Button>
-						) : null}
-					</div>
+					) : null}
 				</div>
 			);
 		}
@@ -742,168 +734,185 @@ export default function ToolsPage() {
 
 	return (
 		<SettingsPage>
-			<SettingsHeader>Behaviour & tools</SettingsHeader>
+			<SettingsHeader>
+				Tools & Skills
+				<div className="flex items-center gap-2 pr-1">
+					<Button
+						disabled={isMutating}
+						onClick={() => setEditorTarget({ kind: "create-custom" })}
+						size="sm"
+						type="button"
+						variant="secondary"
+					>
+						Create custom tool
+					</Button>
+				</div>
+			</SettingsHeader>
 			<PageContent className="py-30">
 				<div className="mx-auto w-full max-w-6xl space-y-8 px-4 pb-8">
 					<section className="space-y-3">
 						<div className="space-y-1">
-							<h1 className="font-medium text-base">Behavior</h1>
+							<h1 className="font-medium text-base">Custom tools</h1>
 							<p className="text-muted-foreground text-sm">
-								Core behavior tools and their attached skills.
-							</p>
-						</div>
-						<div className="grid gap-4 lg:grid-cols-2">
-							{toolSections.behaviorTools.map((tool) => renderToolCard(tool))}
-						</div>
-					</section>
-
-					<section className="space-y-3">
-						<div className="space-y-1">
-							<h2 className="font-medium text-base">Actions</h2>
-							<p className="text-muted-foreground text-sm">
-								Finish actions and execution tools with one attached skill each.
-							</p>
-						</div>
-						<div className="grid gap-4 lg:grid-cols-2">
-							{toolSections.actionTools.map((tool) => renderToolCard(tool))}
-						</div>
-					</section>
-
-					<section className="space-y-3">
-						<div className="space-y-1">
-							<h2 className="font-medium text-base">Advanced</h2>
-							<p className="text-muted-foreground text-sm">
-								Optional skills outside default tools.
+								Add reusable instructions for workflows outside default tools.
 							</p>
 						</div>
 
-						<Card className="border-border/60">
-							<Accordion className="w-full" collapsible type="single">
-								<AccordionItem className="border-b-0" value="custom-skills">
-									<AccordionTrigger className="px-4">
-										<div className="space-y-1">
-											<p className="font-medium text-sm">Custom skills</p>
-											<p className="text-muted-foreground text-xs">
-												{customSkills.length > 0
-													? `${customSkills.length} custom skill${customSkills.length === 1 ? "" : "s"}`
-													: "No custom skills yet"}
-											</p>
-										</div>
-									</AccordionTrigger>
-									<AccordionContent className="space-y-4 px-4 pb-4">
-										<Card className="border-border/60 border-dashed">
-											<CardContent className="flex items-center justify-between gap-3 p-4">
-												<div className="space-y-1">
-													<p className="font-medium text-sm">
-														Create custom skill
-													</p>
-													<p className="text-muted-foreground text-xs">
-														Add reusable instructions for niche workflows.
-													</p>
+						{customSkills.length === 0 ? (
+							<div className="flex h-44 flex-col items-center justify-center gap-2 rounded border border-primary/10 border-dashed p-4">
+								<p className="text-muted-foreground text-sm">
+									No custom tools yet.
+								</p>
+								<Button
+									disabled={isMutating}
+									onClick={() => setEditorTarget({ kind: "create-custom" })}
+									size="sm"
+									type="button"
+								>
+									Create
+								</Button>
+							</div>
+						) : (
+							<div className="grid gap-4 lg:grid-cols-2">
+								{customSkills.map((skill) => {
+									const preview = customSkillPreviewById[skill.id];
+									const displayName =
+										customSkillDisplayNameById[skill.id] ??
+										normalizeSkillFrontmatterName(skill.name);
+
+									return (
+										<Card className="border-border/60" key={skill.id}>
+											<CardHeader className="space-y-2 p-4">
+												<div className="flex items-start justify-between gap-3">
+													<div>
+														<CardTitle className="text-base">
+															{displayName}
+														</CardTitle>
+													</div>
+													<div className="flex items-center gap-2">
+														<Switch
+															aria-label={`Toggle ${displayName}`}
+															checked={skill.enabled}
+															disabled={isMutating}
+															onCheckedChange={(checked) =>
+																void toggleSkillMutation.mutateAsync({
+																	websiteSlug: website.slug,
+																	aiAgentId: aiAgent.id,
+																	skillDocumentId: skill.id,
+																	enabled: checked,
+																})
+															}
+														/>
+														<Button
+															aria-label={`Edit ${displayName}`}
+															disabled={isMutating}
+															onClick={() =>
+																setEditorTarget({
+																	kind: "custom",
+																	skillId: skill.id,
+																})
+															}
+															size="icon-small"
+															type="button"
+															variant="ghost"
+														>
+															<Pencil className="size-3.5" />
+														</Button>
+													</div>
 												</div>
+											</CardHeader>
+											<CardContent className="p-4 pt-0">
+												<p className="text-muted-foreground text-sm">
+													{preview?.description ||
+														"Custom markdown behavior skill."}
+												</p>
+											</CardContent>
+											<CardFooter className="justify-between border-border/50 border-t p-4 pt-3">
+												<p className="text-muted-foreground text-xs">
+													Priority {skill.priority}
+												</p>
 												<Button
+													disabled={isMutating}
 													onClick={() =>
-														setEditorTarget({ kind: "create-custom" })
+														void deleteSkillMutation.mutateAsync({
+															websiteSlug: website.slug,
+															aiAgentId: aiAgent.id,
+															skillDocumentId: skill.id,
+														})
 													}
 													size="sm"
 													type="button"
+													variant="destructive"
 												>
-													Create
+													Delete
 												</Button>
-											</CardContent>
+											</CardFooter>
 										</Card>
+									);
+								})}
+							</div>
+						)}
+					</section>
 
-										{customSkills.length === 0 ? (
-											<Card className="border-border/60">
-												<CardContent className="p-4">
-													<p className="text-muted-foreground text-sm">
-														No custom skills yet.
-													</p>
-												</CardContent>
-											</Card>
-										) : (
-											<div className="grid gap-4 lg:grid-cols-2">
-												{customSkills.map((skill) => {
-													const preview = customSkillPreviewById[skill.id];
-													return (
-														<Card className="border-border/60" key={skill.id}>
-															<CardHeader className="space-y-2 p-4">
-																<div className="flex items-start justify-between gap-3">
-																	<div className="space-y-1">
-																		<CardTitle className="text-base">
-																			{preview?.name ?? skill.name}
-																		</CardTitle>
-																		<p className="text-muted-foreground text-xs">
-																			{skill.enabled ? "Enabled" : "Disabled"}
-																		</p>
-																	</div>
-																	<div className="flex items-center gap-2">
-																		<Switch
-																			aria-label={`Toggle ${skill.name}`}
-																			checked={skill.enabled}
-																			disabled={isMutating}
-																			onCheckedChange={(checked) =>
-																				void toggleSkillMutation.mutateAsync({
-																					websiteSlug: website.slug,
-																					aiAgentId: aiAgent.id,
-																					skillDocumentId: skill.id,
-																					enabled: checked,
-																				})
-																			}
-																		/>
-																		<Button
-																			aria-label={`Edit ${skill.name}`}
-																			disabled={isMutating}
-																			onClick={() =>
-																				setEditorTarget({
-																					kind: "custom",
-																					skillId: skill.id,
-																				})
-																			}
-																			size="icon-small"
-																			type="button"
-																			variant="ghost"
-																		>
-																			<Pencil className="size-3.5" />
-																		</Button>
-																	</div>
-																</div>
-															</CardHeader>
-															<CardContent className="p-4 pt-0">
-																<p className="text-muted-foreground text-sm">
-																	{preview?.description ||
-																		"Custom markdown behavior skill."}
-																</p>
-															</CardContent>
-															<CardFooter className="justify-between border-border/50 border-t p-4 pt-3">
-																<p className="text-muted-foreground text-xs">
-																	Priority {skill.priority}
-																</p>
-																<Button
-																	disabled={isMutating}
-																	onClick={() =>
-																		void deleteSkillMutation.mutateAsync({
-																			websiteSlug: website.slug,
-																			aiAgentId: aiAgent.id,
-																			skillDocumentId: skill.id,
-																		})
-																	}
-																	size="sm"
-																	type="button"
-																	variant="destructive"
-																>
-																	Delete
-																</Button>
-															</CardFooter>
-														</Card>
-													);
-												})}
-											</div>
-										)}
-									</AccordionContent>
-								</AccordionItem>
-							</Accordion>
-						</Card>
+					<section className="space-y-3">
+						<div className="space-y-1">
+							<h2 className="font-medium text-base">Behavior tools</h2>
+							<p className="text-muted-foreground text-sm">
+								Toggle optional behavior capabilities and edit attached
+								guidance.
+							</p>
+						</div>
+						{toolSections.toggleableBehaviorTools.length === 0 ? (
+							<Card className="border-border/60">
+								<CardContent className="p-4">
+									<p className="text-muted-foreground text-sm">
+										No toggleable behavior tools.
+									</p>
+								</CardContent>
+							</Card>
+						) : (
+							<div className="grid gap-4 lg:grid-cols-2">
+								{toolSections.toggleableBehaviorTools.map((tool) =>
+									renderToolCard(tool)
+								)}
+							</div>
+						)}
+					</section>
+
+					<section className="space-y-3">
+						<div className="space-y-1">
+							<h2 className="font-medium text-base">Action tools</h2>
+							<p className="text-muted-foreground text-sm">
+								Toggle optional finish actions and edit their attached guidance.
+							</p>
+						</div>
+						{toolSections.toggleableActionTools.length === 0 ? (
+							<Card className="border-border/60">
+								<CardContent className="p-4">
+									<p className="text-muted-foreground text-sm">
+										No toggleable action tools.
+									</p>
+								</CardContent>
+							</Card>
+						) : (
+							<div className="grid gap-4 lg:grid-cols-2">
+								{toolSections.toggleableActionTools.map((tool) =>
+									renderToolCard(tool)
+								)}
+							</div>
+						)}
+					</section>
+
+					<section className="space-y-3">
+						<div className="space-y-1">
+							<h2 className="font-medium text-base">Always-on tools</h2>
+							<p className="text-muted-foreground text-sm">
+								Required tools that are always active in agent runs.
+							</p>
+						</div>
+						<div className="grid gap-4 lg:grid-cols-2">
+							{toolSections.alwaysOnTools.map((tool) => renderToolCard(tool))}
+						</div>
 					</section>
 				</div>
 			</PageContent>

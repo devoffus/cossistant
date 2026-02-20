@@ -1,8 +1,14 @@
 import { getOrganizationBySlug } from "@api/db/queries/organization";
 import { getWebsiteBySlugWithAccess } from "@api/db/queries/website";
 import { website } from "@api/db/schema";
-import { user as authUser, invitation, member } from "@api/db/schema/auth";
+import {
+	user as authUser,
+	invitation,
+	member,
+	organization,
+} from "@api/db/schema/auth";
 import { auth } from "@api/lib/auth";
+import { sendTeamInvitationEmail } from "@api/lib/team-invitation-mailer";
 import {
 	calculateWebsiteSeatUsage,
 	hasPrivilegedRole,
@@ -12,6 +18,10 @@ import {
 	parseRoleList,
 	withWebsiteInviteAdvisoryLock,
 } from "@api/lib/team-seats";
+import {
+	incrementTeamInviteCounter,
+	logTeamInviteEvent,
+} from "@api/utils/team-invitation-monitoring";
 import { TRPCError } from "@trpc/server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -22,12 +32,30 @@ const emailSchema = z.email();
 
 const inviteStatusSchema = z.enum([
 	"invited",
+	"added-to-team",
+	"promoted-to-admin",
+	"delivery-failed",
 	"already-member",
 	"already-invited",
 	"invalid-email",
 	"plan-limit",
 	"failed",
 ]);
+const resendDeliverySchema = z.enum(["sent", "failed"]);
+const updateRoleInputSchema = z.union([z.string(), z.array(z.string())]);
+const joinResultCodeSchema = z.enum([
+	"accepted",
+	"rejected",
+	"wrong-account",
+	"invalid-invitation",
+	"email-verification-required",
+	"error",
+]);
+
+const joinActionResultSchema = z.object({
+	resultCode: joinResultCodeSchema,
+	message: z.string().nullable().optional(),
+});
 
 const teamSettingsSchema = z.object({
 	viewerRole: z.string().nullable(),
@@ -92,6 +120,95 @@ const joinRouteStateSchema = z.object({
 	isAlreadyMember: z.boolean(),
 });
 
+type InviteStatus = z.infer<typeof inviteStatusSchema>;
+type JoinResultCode = z.infer<typeof joinResultCodeSchema>;
+
+export function isInviteResultSuccess(status: InviteStatus): boolean {
+	return (
+		status === "invited" ||
+		status === "added-to-team" ||
+		status === "promoted-to-admin"
+	);
+}
+
+function toErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : "Unknown error";
+}
+
+function isEmailVerificationJoinError(message: string): boolean {
+	return (
+		message.includes(
+			"email verification required before accepting or rejecting invitation"
+		) || message.includes("email verification required")
+	);
+}
+
+function isInvalidInvitationJoinError(message: string): boolean {
+	return (
+		message.includes("invitation_not_found") ||
+		message.includes("invitation not found") ||
+		message.includes("expired")
+	);
+}
+
+function isWrongAccountJoinError(message: string): boolean {
+	return (
+		message.includes("you are not the recipient of the invitation") ||
+		message.includes("recipient")
+	);
+}
+
+export function mapJoinErrorToResult(error: unknown): {
+	resultCode: JoinResultCode;
+	message: string | null;
+} {
+	const message = toErrorMessage(error);
+	const normalizedMessage = message.toLowerCase();
+
+	if (isEmailVerificationJoinError(normalizedMessage)) {
+		return {
+			resultCode: "email-verification-required",
+			message,
+		};
+	}
+
+	if (isWrongAccountJoinError(normalizedMessage)) {
+		return {
+			resultCode: "wrong-account",
+			message,
+		};
+	}
+
+	if (isInvalidInvitationJoinError(normalizedMessage)) {
+		return {
+			resultCode: "invalid-invitation",
+			message,
+		};
+	}
+
+	return {
+		resultCode: "error",
+		message,
+	};
+}
+
+async function ensureActiveOrganization(params: {
+	headers: Headers;
+	organizationId: string;
+	activeOrganizationId: string | null | undefined;
+}) {
+	if (params.activeOrganizationId === params.organizationId) {
+		return;
+	}
+
+	await auth.api.setActiveOrganization({
+		headers: params.headers,
+		body: {
+			organizationId: params.organizationId,
+		},
+	});
+}
+
 function mapInviteError(error: unknown): {
 	status: z.infer<typeof inviteStatusSchema>;
 	message: string;
@@ -143,12 +260,12 @@ export const teamRouter = createTRPCRouter({
 		)
 		.output(joinRouteStateSchema.nullable())
 		.query(async ({ ctx: { db, user, session }, input }) => {
-			const organization = await getOrganizationBySlug(
+			const foundOrganization = await getOrganizationBySlug(
 				db,
 				input.organizationSlug
 			);
 
-			if (!organization) {
+			if (!foundOrganization) {
 				return null;
 			}
 
@@ -172,17 +289,17 @@ export const teamRouter = createTRPCRouter({
 				.where(
 					and(
 						eq(invitation.id, input.invitationId),
-						eq(invitation.organizationId, organization.id)
+						eq(invitation.organizationId, foundOrganization.id)
 					)
 				)
 				.limit(1);
 
 			if (!invitationRecord) {
 				return {
-					organizationId: organization.id,
-					organizationName: organization.name,
-					organizationSlug: organization.slug,
-					organizationLogoUrl: organization.logo ?? null,
+					organizationId: foundOrganization.id,
+					organizationName: foundOrganization.name,
+					organizationSlug: foundOrganization.slug,
+					organizationLogoUrl: foundOrganization.logo ?? null,
 					websiteName: null,
 					websiteLogoUrl: null,
 					invitationId: input.invitationId,
@@ -227,7 +344,7 @@ export const teamRouter = createTRPCRouter({
 							.from(website)
 							.where(
 								and(
-									eq(website.organizationId, organization.id),
+									eq(website.organizationId, foundOrganization.id),
 									inArray(website.teamId, invitationTeamIds),
 									isNull(website.deletedAt)
 								)
@@ -257,7 +374,7 @@ export const teamRouter = createTRPCRouter({
 							.from(member)
 							.where(
 								and(
-									eq(member.organizationId, organization.id),
+									eq(member.organizationId, foundOrganization.id),
 									eq(member.userId, currentUser.id)
 								)
 							)
@@ -265,10 +382,10 @@ export const teamRouter = createTRPCRouter({
 					: [];
 
 			return {
-				organizationId: organization.id,
-				organizationName: organization.name,
-				organizationSlug: organization.slug,
-				organizationLogoUrl: organization.logo ?? null,
+				organizationId: foundOrganization.id,
+				organizationName: foundOrganization.name,
+				organizationSlug: foundOrganization.slug,
+				organizationLogoUrl: foundOrganization.logo ?? null,
 				websiteName: targetWebsite?.name ?? null,
 				websiteLogoUrl: targetWebsite?.logoUrl ?? null,
 				invitationId: invitationRecord.id,
@@ -409,7 +526,7 @@ export const teamRouter = createTRPCRouter({
 				}),
 			})
 		)
-		.mutation(async ({ ctx: { db, user, headers }, input }) => {
+		.mutation(async ({ ctx: { db, user, headers, session }, input }) => {
 			const websiteData = await getWebsiteBySlugWithAccess(db, {
 				userId: user.id,
 				websiteSlug: input.websiteSlug,
@@ -446,31 +563,72 @@ export const teamRouter = createTRPCRouter({
 				.filter(Boolean)
 				.slice(0, 50);
 
+			const [organizationRecord] = await db
+				.select({
+					id: organization.id,
+					name: organization.name,
+					slug: organization.slug,
+				})
+				.from(organization)
+				.where(eq(organization.id, websiteData.organizationId))
+				.limit(1);
+
+			if (!organizationRecord) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Organization not found.",
+				});
+			}
+
 			const inviteLockResult = await withWebsiteInviteAdvisoryLock(db, {
 				websiteId: websiteData.id,
 				run: async () => {
-					const [accessUsers, seatUsage, invitationRows] = await Promise.all([
-						listWebsiteAccessUsers(db, {
-							organizationId: websiteData.organizationId,
-							teamId: websiteData.teamId,
-						}),
-						calculateWebsiteSeatUsage(db, {
-							website: websiteData,
-						}),
-						db
-							.select({
-								email: invitation.email,
-								role: invitation.role,
-								status: invitation.status,
-								expiresAt: invitation.expiresAt,
-								teamId: invitation.teamId,
-							})
-							.from(invitation)
-							.where(eq(invitation.organizationId, websiteData.organizationId)),
-					]);
+					const [accessUsers, seatUsage, invitationRows, organizationMembers] =
+						await Promise.all([
+							listWebsiteAccessUsers(db, {
+								organizationId: websiteData.organizationId,
+								teamId: websiteData.teamId,
+							}),
+							calculateWebsiteSeatUsage(db, {
+								website: websiteData,
+							}),
+							db
+								.select({
+									id: invitation.id,
+									email: invitation.email,
+									role: invitation.role,
+									status: invitation.status,
+									expiresAt: invitation.expiresAt,
+									teamId: invitation.teamId,
+								})
+								.from(invitation)
+								.where(
+									eq(invitation.organizationId, websiteData.organizationId)
+								),
+							db
+								.select({
+									memberId: member.id,
+									userId: member.userId,
+									role: member.role,
+									email: authUser.email,
+								})
+								.from(member)
+								.innerJoin(authUser, eq(member.userId, authUser.id))
+								.where(eq(member.organizationId, websiteData.organizationId)),
+						]);
 
 					const existingAccessEmails = new Set(
 						accessUsers.map((accessUser) => normalizeEmail(accessUser.email))
+					);
+					const organizationMembersByEmail = new Map(
+						organizationMembers.map((row) => [
+							normalizeEmail(row.email),
+							{
+								memberId: row.memberId,
+								userId: row.userId,
+								role: row.role,
+							},
+						])
 					);
 
 					const pendingRelevantInvitations = new Set(
@@ -491,7 +649,7 @@ export const teamRouter = createTRPCRouter({
 					let remainingSeats = seatUsage.remaining;
 					const results: Array<{
 						email: string;
-						status: z.infer<typeof inviteStatusSchema>;
+						status: InviteStatus;
 						message?: string;
 					}> = [];
 
@@ -524,6 +682,9 @@ export const teamRouter = createTRPCRouter({
 							continue;
 						}
 
+						const existingOrganizationMember =
+							organizationMembersByEmail.get(email);
+
 						if (remainingSeats !== null && remainingSeats <= 0) {
 							results.push({
 								email,
@@ -534,8 +695,76 @@ export const teamRouter = createTRPCRouter({
 							continue;
 						}
 
+						if (existingOrganizationMember) {
+							try {
+								if (input.role === "member") {
+									await ensureActiveOrganization({
+										activeOrganizationId: session.activeOrganizationId,
+										headers,
+										organizationId: websiteData.organizationId,
+									});
+									await auth.api.addTeamMember({
+										headers,
+										body: {
+											teamId: websiteData.teamId,
+											userId: existingOrganizationMember.userId,
+										},
+									});
+									results.push({
+										email,
+										status: "added-to-team",
+									});
+									logTeamInviteEvent({
+										action: "added_to_team",
+										email,
+										organizationId: websiteData.organizationId,
+										role: input.role,
+										teamId: websiteData.teamId,
+										timestamp: new Date(),
+										websiteId: websiteData.id,
+									});
+								} else {
+									await auth.api.updateMemberRole({
+										headers,
+										body: {
+											organizationId: websiteData.organizationId,
+											memberId: existingOrganizationMember.memberId,
+											role: "admin",
+										},
+									});
+									results.push({
+										email,
+										status: "promoted-to-admin",
+									});
+									logTeamInviteEvent({
+										action: "promoted",
+										email,
+										organizationId: websiteData.organizationId,
+										role: input.role,
+										teamId: websiteData.teamId,
+										timestamp: new Date(),
+										websiteId: websiteData.id,
+									});
+								}
+
+								existingAccessEmails.add(email);
+								if (remainingSeats !== null) {
+									remainingSeats -= 1;
+								}
+							} catch (error) {
+								const mappedError = mapInviteError(error);
+								results.push({
+									email,
+									status: mappedError.status,
+									message: mappedError.message,
+								});
+							}
+
+							continue;
+						}
+
 						try {
-							await auth.api.createInvitation({
+							const createdInvitation = await auth.api.createInvitation({
 								headers,
 								body: {
 									organizationId: websiteData.organizationId,
@@ -546,10 +775,52 @@ export const teamRouter = createTRPCRouter({
 								},
 							});
 
+							const emailDelivery = await sendTeamInvitationEmail({
+								email,
+								invitationId: createdInvitation.id,
+								inviterName: user.name ?? null,
+								organizationName: organizationRecord.name,
+								organizationSlug: organizationRecord.slug,
+							});
+
 							results.push({
 								email,
-								status: "invited",
+								status: emailDelivery.success ? "invited" : "delivery-failed",
+								message: emailDelivery.success
+									? undefined
+									: (emailDelivery.errorMessage ??
+										"Invitation created, but delivery failed. You can resend it."),
 							});
+							if (emailDelivery.success) {
+								logTeamInviteEvent({
+									action: "created",
+									email,
+									invitationId: createdInvitation.id,
+									organizationId: websiteData.organizationId,
+									role: input.role,
+									teamId: websiteData.teamId,
+									timestamp: new Date(),
+									websiteId: websiteData.id,
+								});
+							} else {
+								logTeamInviteEvent({
+									action: "delivery_failed",
+									email,
+									invitationId: createdInvitation.id,
+									organizationId: websiteData.organizationId,
+									reason: emailDelivery.errorMessage,
+									role: input.role,
+									teamId: websiteData.teamId,
+									timestamp: new Date(),
+									websiteId: websiteData.id,
+								});
+								incrementTeamInviteCounter({
+									counter: "invite_delivery_failed_total",
+									organizationId: websiteData.organizationId,
+									teamId: websiteData.teamId,
+									websiteId: websiteData.id,
+								});
+							}
 							pendingRelevantInvitations.add(email);
 							if (remainingSeats !== null) {
 								remainingSeats -= 1;
@@ -564,8 +835,8 @@ export const teamRouter = createTRPCRouter({
 						}
 					}
 
-					const invitedCount = results.filter(
-						(result) => result.status === "invited"
+					const invitedCount = results.filter((result) =>
+						isInviteResultSuccess(result.status)
 					).length;
 					const failedCount = results.length - invitedCount;
 					const updatedSeatUsage = await calculateWebsiteSeatUsage(db, {
@@ -598,6 +869,13 @@ export const teamRouter = createTRPCRouter({
 			z.object({
 				websiteSlug: z.string(),
 				invitationId: z.string(),
+			})
+		)
+		.output(
+			z.object({
+				success: z.boolean(),
+				delivery: resendDeliverySchema,
+				message: z.string().nullable().optional(),
 			})
 		)
 		.mutation(async ({ ctx: { db, user, headers }, input }) => {
@@ -680,7 +958,7 @@ export const teamRouter = createTRPCRouter({
 						.filter(Boolean)
 				: (existingInvitation.teamId ?? undefined);
 
-			await auth.api.createInvitation({
+			const resentInvitation = await auth.api.createInvitation({
 				headers,
 				body: {
 					organizationId: websiteData.organizationId,
@@ -691,7 +969,82 @@ export const teamRouter = createTRPCRouter({
 				},
 			});
 
-			return { success: true };
+			const [organizationRecord] = await db
+				.select({
+					name: organization.name,
+					slug: organization.slug,
+				})
+				.from(organization)
+				.where(eq(organization.id, websiteData.organizationId))
+				.limit(1);
+
+			if (!organizationRecord) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Organization not found.",
+				});
+			}
+
+			const delivery = await sendTeamInvitationEmail({
+				email: normalizeEmail(existingInvitation.email),
+				invitationId: resentInvitation.id,
+				inviterName: user.name ?? null,
+				organizationName: organizationRecord.name,
+				organizationSlug: organizationRecord.slug,
+			});
+
+			incrementTeamInviteCounter({
+				counter: "invite_resend_attempt_total",
+				organizationId: websiteData.organizationId,
+				teamId: websiteData.teamId,
+				websiteId: websiteData.id,
+			});
+
+			if (delivery.success) {
+				logTeamInviteEvent({
+					action: "resend_sent",
+					email: normalizeEmail(existingInvitation.email),
+					invitationId: resentInvitation.id,
+					organizationId: websiteData.organizationId,
+					role,
+					teamId: websiteData.teamId,
+					timestamp: new Date(),
+					websiteId: websiteData.id,
+				});
+				incrementTeamInviteCounter({
+					counter: "invite_resend_success_total",
+					organizationId: websiteData.organizationId,
+					teamId: websiteData.teamId,
+					websiteId: websiteData.id,
+				});
+			} else {
+				logTeamInviteEvent({
+					action: "resend_failed",
+					email: normalizeEmail(existingInvitation.email),
+					invitationId: resentInvitation.id,
+					organizationId: websiteData.organizationId,
+					reason: delivery.errorMessage,
+					role,
+					teamId: websiteData.teamId,
+					timestamp: new Date(),
+					websiteId: websiteData.id,
+				});
+				incrementTeamInviteCounter({
+					counter: "invite_delivery_failed_total",
+					organizationId: websiteData.organizationId,
+					teamId: websiteData.teamId,
+					websiteId: websiteData.id,
+				});
+			}
+
+			return {
+				success: true,
+				delivery: delivery.success ? "sent" : "failed",
+				message: delivery.success
+					? null
+					: (delivery.errorMessage ??
+						"Invitation resent, but delivery failed. Please try again."),
+			};
 		}),
 	cancelInvitation: protectedProcedure
 		.input(
@@ -778,7 +1131,7 @@ export const teamRouter = createTRPCRouter({
 			z.object({
 				websiteSlug: z.string(),
 				memberId: z.string(),
-				role: teamRoleSchema,
+				role: updateRoleInputSchema,
 			})
 		)
 		.mutation(async ({ ctx: { db, user, headers }, input }) => {
@@ -851,7 +1204,7 @@ export const teamRouter = createTRPCRouter({
 				memberId: z.string(),
 			})
 		)
-		.mutation(async ({ ctx: { db, user, headers }, input }) => {
+		.mutation(async ({ ctx: { db, user, headers, session }, input }) => {
 			const websiteData = await getWebsiteBySlugWithAccess(db, {
 				userId: user.id,
 				websiteSlug: input.websiteSlug,
@@ -909,6 +1262,11 @@ export const teamRouter = createTRPCRouter({
 			}
 
 			if (targetMember.accessSource === "team") {
+				await ensureActiveOrganization({
+					activeOrganizationId: session.activeOrganizationId,
+					headers,
+					organizationId: websiteData.organizationId,
+				});
 				await auth.api.removeTeamMember({
 					headers,
 					body: {
@@ -928,6 +1286,157 @@ export const teamRouter = createTRPCRouter({
 
 			return {
 				success: true,
+			};
+		}),
+	acceptJoinInvitation: protectedProcedure
+		.input(
+			z.object({
+				organizationSlug: z.string(),
+				invitationId: z.string(),
+			})
+		)
+		.output(joinActionResultSchema)
+		.mutation(async ({ ctx: { db, user, headers }, input }) => {
+			const organizationRecord = await getOrganizationBySlug(
+				db,
+				input.organizationSlug
+			);
+
+			if (!organizationRecord) {
+				return {
+					resultCode: "invalid-invitation",
+				};
+			}
+
+			const [invitationRecord] = await db
+				.select({
+					id: invitation.id,
+					email: invitation.email,
+					status: invitation.status,
+					expiresAt: invitation.expiresAt,
+				})
+				.from(invitation)
+				.where(
+					and(
+						eq(invitation.id, input.invitationId),
+						eq(invitation.organizationId, organizationRecord.id)
+					)
+				)
+				.limit(1);
+
+			if (
+				!(
+					invitationRecord &&
+					invitationRecord.status === "pending" &&
+					invitationRecord.expiresAt.getTime() > Date.now()
+				)
+			) {
+				return {
+					resultCode: "invalid-invitation",
+				};
+			}
+
+			if (
+				normalizeEmail(invitationRecord.email) !== normalizeEmail(user.email)
+			) {
+				return {
+					resultCode: "wrong-account",
+				};
+			}
+
+			try {
+				await auth.api.acceptInvitation({
+					headers,
+					body: {
+						invitationId: input.invitationId,
+					},
+				});
+			} catch (error) {
+				return mapJoinErrorToResult(error);
+			}
+
+			return {
+				resultCode: "accepted",
+			};
+		}),
+	rejectJoinInvitation: protectedProcedure
+		.input(
+			z.object({
+				organizationSlug: z.string(),
+				invitationId: z.string(),
+			})
+		)
+		.output(joinActionResultSchema)
+		.mutation(async ({ ctx: { db, user, headers }, input }) => {
+			const organizationRecord = await getOrganizationBySlug(
+				db,
+				input.organizationSlug
+			);
+
+			if (!organizationRecord) {
+				return {
+					resultCode: "invalid-invitation",
+				};
+			}
+
+			const [invitationRecord] = await db
+				.select({
+					id: invitation.id,
+					email: invitation.email,
+					status: invitation.status,
+					expiresAt: invitation.expiresAt,
+				})
+				.from(invitation)
+				.where(
+					and(
+						eq(invitation.id, input.invitationId),
+						eq(invitation.organizationId, organizationRecord.id)
+					)
+				)
+				.limit(1);
+
+			if (!invitationRecord) {
+				return {
+					resultCode: "invalid-invitation",
+				};
+			}
+
+			if (
+				normalizeEmail(invitationRecord.email) !== normalizeEmail(user.email)
+			) {
+				return {
+					resultCode: "wrong-account",
+				};
+			}
+
+			if (invitationRecord.status === "rejected") {
+				return {
+					resultCode: "rejected",
+				};
+			}
+
+			if (
+				invitationRecord.status !== "pending" ||
+				invitationRecord.expiresAt.getTime() <= Date.now()
+			) {
+				return {
+					resultCode: "invalid-invitation",
+				};
+			}
+
+			try {
+				await auth.api.rejectInvitation({
+					headers,
+					body: {
+						invitationId: input.invitationId,
+					},
+				});
+			} catch (error) {
+				return mapJoinErrorToResult(error);
+			}
+
+			return {
+				resultCode: "rejected",
 			};
 		}),
 });

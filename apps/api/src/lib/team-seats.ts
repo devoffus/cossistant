@@ -2,6 +2,7 @@ import type { Database } from "@api/db";
 import type { getWebsiteBySlugWithAccess } from "@api/db/queries/website";
 import { invitation, member, teamMember, user } from "@api/db/schema";
 import { getPlanForWebsite } from "@api/lib/plans/access";
+import { hasAnyRole, parseCommaSeparatedRoles } from "@cossistant/core";
 import { and, eq, gt, inArray, sql } from "drizzle-orm";
 
 const PRIVILEGED_ROLES = ["owner", "admin"] as const;
@@ -54,19 +55,11 @@ export async function withWebsiteInviteAdvisoryLock<T>(
 }
 
 export function parseRoleList(value: string | null | undefined): string[] {
-	if (!value) {
-		return [];
-	}
-
-	return value
-		.split(",")
-		.map((item) => item.trim().toLowerCase())
-		.filter(Boolean);
+	return parseCommaSeparatedRoles(value);
 }
 
 export function hasPrivilegedRole(value: string | null | undefined): boolean {
-	const roles = parseRoleList(value);
-	return PRIVILEGED_ROLES.some((role) => roles.includes(role));
+	return hasAnyRole(value, PRIVILEGED_ROLES);
 }
 
 export function normalizeEmail(value: string): string {

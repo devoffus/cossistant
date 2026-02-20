@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-import { authClient } from "@/lib/auth/client";
+import { useMutation } from "@tanstack/react-query";
+import { useCallback, useState } from "react";
+import { useTRPC } from "@/lib/trpc/client";
 
 export type InvitationStatus =
 	| "pending"
@@ -13,34 +12,95 @@ export type InvitationStatus =
 	| "expired"
 	| "not-found";
 
-export type JoinAcceptanceState =
-	| "accepting"
-	| "success"
+type JoinResultCode =
+	| "accepted"
+	| "rejected"
 	| "wrong-account"
 	| "invalid-invitation"
+	| "email-verification-required"
+	| "error";
+
+export type JoinAcceptanceState =
+	| "idle"
+	| "accepting"
+	| "rejecting"
+	| "success"
+	| "rejected"
+	| "wrong-account"
+	| "invalid-invitation"
+	| "email-verification-required"
 	| "error";
 
 type UseJoinAcceptanceParams = {
+	organizationSlug: string;
 	invitationId: string;
 	invitationStatus: InvitationStatus;
 	isInvitationValid: boolean;
 	isSignedInEmailMatchingInvitation: boolean | null;
-	organizationName: string;
 };
 
+export function getInitialJoinState(params: {
+	isInvitationValid: boolean;
+	isSignedInEmailMatchingInvitation: boolean | null;
+}): JoinAcceptanceState {
+	if (!params.isInvitationValid) {
+		return "invalid-invitation";
+	}
+
+	if (params.isSignedInEmailMatchingInvitation === false) {
+		return "wrong-account";
+	}
+
+	return "idle";
+}
+
+function mapJoinResultCodeToState(code: JoinResultCode): JoinAcceptanceState {
+	switch (code) {
+		case "accepted":
+			return "success";
+		case "rejected":
+			return "rejected";
+		case "wrong-account":
+			return "wrong-account";
+		case "invalid-invitation":
+			return "invalid-invitation";
+		case "email-verification-required":
+			return "email-verification-required";
+		default:
+			return "error";
+	}
+}
+
 export function useJoinAcceptance({
+	organizationSlug,
 	invitationId,
-	invitationStatus,
+	invitationStatus: _invitationStatus,
 	isInvitationValid,
 	isSignedInEmailMatchingInvitation,
-	organizationName,
 }: UseJoinAcceptanceParams) {
-	const router = useRouter();
-	const [state, setState] = useState<JoinAcceptanceState>("accepting");
+	const trpc = useTRPC();
+	const [state, setState] = useState<JoinAcceptanceState>(() =>
+		getInitialJoinState({
+			isInvitationValid,
+			isSignedInEmailMatchingInvitation,
+		})
+	);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
-	const hasStartedRef = useRef(false);
 
-	const runAcceptance = useCallback(async () => {
+	const { mutateAsync: acceptJoinInvitation, isPending: isAccepting } =
+		useMutation(trpc.team.acceptJoinInvitation.mutationOptions());
+	const { mutateAsync: rejectJoinInvitation, isPending: isRejecting } =
+		useMutation(trpc.team.rejectJoinInvitation.mutationOptions());
+
+	const applyResult = useCallback(
+		(result: { resultCode: JoinResultCode; message?: string | null }) => {
+			setState(mapJoinResultCodeToState(result.resultCode));
+			setErrorMessage(result.message ?? null);
+		},
+		[]
+	);
+
+	const accept = useCallback(async () => {
 		if (!isInvitationValid) {
 			setState("invalid-invitation");
 			return;
@@ -54,66 +114,69 @@ export function useJoinAcceptance({
 		setState("accepting");
 		setErrorMessage(null);
 
-		const response = await authClient.organization.acceptInvitation({
-			invitationId,
-		});
-
-		if (response.error) {
-			const message =
-				response.error.message ||
-				"We couldn't accept this invitation. Please ask your admin to send a new one.";
-			const normalizedMessage = message.toLowerCase();
-
-			if (normalizedMessage.includes("recipient")) {
-				setState("wrong-account");
-				return;
-			}
-
-			if (
-				normalizedMessage.includes("invitation_not_found") ||
-				normalizedMessage.includes("invitation not found") ||
-				normalizedMessage.includes("expired")
-			) {
-				setState("invalid-invitation");
-				return;
-			}
-
+		try {
+			const result = await acceptJoinInvitation({
+				organizationSlug,
+				invitationId,
+			});
+			applyResult(result);
+		} catch (error) {
 			setState("error");
-			setErrorMessage(message);
-			return;
+			setErrorMessage(error instanceof Error ? error.message : null);
 		}
-
-		setState("success");
-		toast.success(`You joined ${organizationName}.`);
-		router.replace("/select");
 	}, [
+		acceptJoinInvitation,
+		applyResult,
 		invitationId,
 		isInvitationValid,
 		isSignedInEmailMatchingInvitation,
-		organizationName,
-		router,
+		organizationSlug,
 	]);
 
-	useEffect(() => {
-		if (hasStartedRef.current) {
-			return;
-		}
-
-		hasStartedRef.current = true;
-		void runAcceptance();
-	}, [runAcceptance]);
-
-	const retry = useCallback(() => {
-		if (!isInvitationValid && invitationStatus !== "pending") {
+	const reject = useCallback(async () => {
+		if (!isInvitationValid) {
 			setState("invalid-invitation");
 			return;
 		}
-		void runAcceptance();
-	}, [invitationStatus, isInvitationValid, runAcceptance]);
+
+		if (isSignedInEmailMatchingInvitation === false) {
+			setState("wrong-account");
+			return;
+		}
+
+		setState("rejecting");
+		setErrorMessage(null);
+
+		try {
+			const result = await rejectJoinInvitation({
+				organizationSlug,
+				invitationId,
+			});
+			applyResult(result);
+		} catch (error) {
+			setState("error");
+			setErrorMessage(error instanceof Error ? error.message : null);
+		}
+	}, [
+		applyResult,
+		invitationId,
+		isInvitationValid,
+		isSignedInEmailMatchingInvitation,
+		organizationSlug,
+		rejectJoinInvitation,
+	]);
+
+	const retry = useCallback(() => {
+		void accept();
+	}, [accept]);
 
 	return {
 		state,
 		errorMessage,
+		accept,
+		reject,
 		retry,
+		isAccepting,
+		isRejecting,
 	};
 }

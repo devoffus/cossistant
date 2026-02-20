@@ -34,9 +34,6 @@ export function AgentsNavigationSidebar() {
 	const isFaqActive = pathname.startsWith(`${trainingPath}/faq`);
 	const isFilesActive = pathname.startsWith(`${trainingPath}/files`);
 
-	// Determine if sections should be open by default
-	const isKnowledgeActive = isWebSourcesActive || isFaqActive || isFilesActive;
-
 	return (
 		<ResizableSidebar position="left" sidebarTitle="AI Agent">
 			<SidebarContainer
@@ -70,13 +67,13 @@ export function AgentsNavigationSidebar() {
 						href={`${basePath}/tools`}
 						iconName="agent"
 					>
-						Behaviour & tools
+						Tools & Skills
 					</SidebarItem>
 				</div>
 
-				{/* Knowledge Section - always open by default */}
+				{/* Knowledge Section - open by default */}
 				<SidebarItem
-					defaultOpen={isKnowledgeActive}
+					defaultOpen
 					iconName="book-open"
 					items={[
 						{

@@ -1,5 +1,6 @@
 "use client";
 
+import { hasRole } from "@cossistant/core";
 import { useQuery } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth/client";
 
@@ -23,8 +24,8 @@ export function useOrganizationRole(): OrganizationRole {
 	});
 
 	const role = data ?? null;
-	const isOwner = role === "owner";
-	const isAdmin = role === "admin";
+	const isOwner = hasRole(role, "owner");
+	const isAdmin = hasRole(role, "admin");
 
 	// While still loading and never fetched, assume admin/owner can create
 	// This prevents the button from flickering/disappearing during initial load

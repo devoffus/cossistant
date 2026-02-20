@@ -25,6 +25,7 @@ import {
 } from "@api/lib/ai";
 import {
 	AI_AGENT_RESERVED_TOOL_SKILL_TEMPLATE_NAMES,
+	AI_AGENT_TOOL_CATALOG,
 	parseSkillFileContent,
 } from "@cossistant/types";
 import type { PrepareStepFunction, ToolSet } from "ai";
@@ -127,6 +128,9 @@ const FINISH_TOOL_NAMES = [
 	"wait",
 ] as const;
 const FINISH_TOOL_NAME_SET = new Set<string>(FINISH_TOOL_NAMES);
+const TOOL_METADATA_BY_DEFAULT_SKILL_NAME = new Map(
+	AI_AGENT_TOOL_CATALOG.map((tool) => [tool.defaultSkill.name, tool])
+);
 
 type ToolCallLike = {
 	toolName?: string;
@@ -246,6 +250,54 @@ export function selectSkillsForPrompt(input: {
 		...toolAttachedSkills,
 		...customEnabledSkills.slice(0, maxCustomSkills),
 	];
+}
+
+export function buildRuntimeSkillDocuments(input: {
+	enabledSkills: ResolvedSkillPromptDocument[];
+	runtimeToolIds: string[];
+	maxCustomSkills?: number;
+}): ResolvedSkillPromptDocument[] {
+	const maxCustomSkills = input.maxCustomSkills ?? MAX_CUSTOM_SKILLS_IN_PROMPT;
+	const runtimeToolIdSet = new Set(input.runtimeToolIds);
+	const enabledToolSkillsByName = new Map(
+		input.enabledSkills
+			.filter((skill) => skill.source === "tool")
+			.map((skill) => [skill.name, skill])
+	);
+	const reservedToolSkillNames = new Set<string>(
+		AI_AGENT_RESERVED_TOOL_SKILL_TEMPLATE_NAMES
+	);
+
+	const runtimeToolSkills: ResolvedSkillPromptDocument[] =
+		AI_AGENT_TOOL_CATALOG.filter((tool) => runtimeToolIdSet.has(tool.id)).map(
+			(tool) => {
+				const overrideDocument = enabledToolSkillsByName.get(
+					tool.defaultSkill.name
+				);
+				return {
+					id: overrideDocument?.id ?? `default:${tool.defaultSkill.name}`,
+					name: tool.defaultSkill.name,
+					content: overrideDocument?.content ?? tool.defaultSkill.content,
+					priority: tool.order,
+					source: "tool",
+				};
+			}
+		);
+
+	const customSkills = input.enabledSkills
+		.filter(
+			(skill) =>
+				skill.source === "custom" && !reservedToolSkillNames.has(skill.name)
+		)
+		.sort((a, b) => {
+			if (b.priority !== a.priority) {
+				return b.priority - a.priority;
+			}
+			return a.name.localeCompare(b.name);
+		})
+		.slice(0, maxCustomSkills);
+
+	return [...runtimeToolSkills, ...customSkills];
 }
 
 export function buildToolCallsByName(
@@ -451,24 +503,32 @@ export async function generate(
 		aiAgent,
 		mode,
 	});
-	const selectedSkillDocuments = selectSkillsForPrompt({
-		enabledSkills: promptBundle.enabledSkills,
-		maxCustomSkills: MAX_CUSTOM_SKILLS_IN_PROMPT,
-	});
 	const runtimeTools: ToolSet = {
 		...tools,
 	};
+	const selectedSkillDocuments = buildRuntimeSkillDocuments({
+		enabledSkills: promptBundle.enabledSkills,
+		runtimeToolIds: Object.keys(runtimeTools),
+		maxCustomSkills: MAX_CUSTOM_SKILLS_IN_PROMPT,
+	});
 	const runtimeFinishTools = getFinishToolsInToolset(runtimeTools);
 
 	const buildResolvedSkillDocuments = (): PromptSkillDocument[] =>
 		selectedSkillDocuments.map((skill) => {
+			const toolMetadata =
+				skill.source === "tool"
+					? TOOL_METADATA_BY_DEFAULT_SKILL_NAME.get(skill.name)
+					: undefined;
 			const parsedSkill = parseSkillFileContent({
 				content: skill.content,
 				canonicalFileName: skill.name,
 			});
 			return {
-				name: skill.name,
+				name: parsedSkill.name,
 				content: parsedSkill.body,
+				source: skill.source,
+				toolId: toolMetadata?.id,
+				toolLabel: toolMetadata?.label,
 			};
 		});
 

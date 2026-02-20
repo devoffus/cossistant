@@ -30,6 +30,9 @@ import { PROMPT_TEMPLATES } from "./templates";
 export type PromptSkillDocument = {
 	name: string;
 	content: string;
+	source: "tool" | "custom";
+	toolId?: string;
+	toolLabel?: string;
 };
 
 type BuildPromptInput = {
@@ -194,11 +197,11 @@ export function buildSystemPrompt(input: BuildPromptInput): string {
 		parts.push(capabilitiesDocument);
 	}
 
-	const selectedSkillsSection = buildSelectedSkillsSection(
+	const selectedSkillSections = buildSelectedSkillsSections(
 		selectedSkillDocuments
 	);
-	if (selectedSkillsSection) {
-		parts.push(selectedSkillsSection);
+	for (const section of selectedSkillSections) {
+		parts.push(section);
 	}
 
 	// Add command instructions when a human agent provided a command
@@ -334,20 +337,50 @@ function getCoreDocumentContent(
 	return fallback.trim();
 }
 
-function buildSelectedSkillsSection(
+function buildSelectedSkillsSections(
 	selectedSkillDocuments: PromptSkillDocument[] | undefined
-): string {
+): string[] {
 	if (!selectedSkillDocuments || selectedSkillDocuments.length === 0) {
-		return "";
+		return [];
 	}
 
-	const sections = selectedSkillDocuments.map(
-		(skill) => `### ${skill.name}\n\n${skill.content.trim()}`
+	const toolSkills = selectedSkillDocuments.filter(
+		(skill) => skill.source === "tool"
 	);
+	const customSkills = selectedSkillDocuments.filter(
+		(skill) => skill.source === "custom"
+	);
+	const sections: string[] = [];
 
-	return [
-		"## Selected Skills (Optional Guidance)",
-		"These skills were selected for this turn. Use them only if relevant. You may use none, one, or several skills.",
-		sections.join("\n\n"),
-	].join("\n\n");
+	if (toolSkills.length > 0) {
+		const toolSections = toolSkills.map((skill) => {
+			const heading = skill.toolLabel || skill.name;
+			return `### ${heading}\n\n${skill.content.trim()}`;
+		});
+
+		sections.push(
+			[
+				"## Tool Skills (Required)",
+				"These instructions are mandatory whenever their tool is available in this run.",
+				"Apply each tool skill when deciding how and when to call that tool.",
+				toolSections.join("\n\n"),
+			].join("\n\n")
+		);
+	}
+
+	if (customSkills.length > 0) {
+		const customSections = customSkills.map(
+			(skill) => `### ${skill.name}\n\n${skill.content.trim()}`
+		);
+
+		sections.push(
+			[
+				"## Custom Skills (Contextual)",
+				"These instructions are contextual. Apply them only when relevant to the current conversation.",
+				customSections.join("\n\n"),
+			].join("\n\n")
+		);
+	}
+
+	return sections;
 }

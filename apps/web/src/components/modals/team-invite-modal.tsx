@@ -40,6 +40,9 @@ type InviteResult = {
 	email: string;
 	status:
 		| "invited"
+		| "added-to-team"
+		| "promoted-to-admin"
+		| "delivery-failed"
 		| "already-member"
 		| "already-invited"
 		| "invalid-email"
@@ -63,6 +66,12 @@ function statusLabel(status: InviteResult["status"]): string {
 	switch (status) {
 		case "invited":
 			return "Invited";
+		case "added-to-team":
+			return "Added to website team";
+		case "promoted-to-admin":
+			return "Promoted to org admin";
+		case "delivery-failed":
+			return "Delivery failed";
 		case "already-member":
 			return "Already has access";
 		case "already-invited":
@@ -79,7 +88,11 @@ function statusLabel(status: InviteResult["status"]): string {
 function statusVariant(
 	status: InviteResult["status"]
 ): "default" | "secondary" {
-	return status === "invited" ? "default" : "secondary";
+	return status === "invited" ||
+		status === "added-to-team" ||
+		status === "promoted-to-admin"
+		? "default"
+		: "secondary";
 }
 
 export function TeamInviteModal({
@@ -173,9 +186,9 @@ export function TeamInviteModal({
 
 		if (response.summary.invited > 0) {
 			toast.success(
-				`${response.summary.invited} invitation${
+				`${response.summary.invited} access update${
 					response.summary.invited === 1 ? "" : "s"
-				} sent.`
+				} completed.`
 			);
 		}
 	};
@@ -217,10 +230,17 @@ export function TeamInviteModal({
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="member">Member</SelectItem>
-								<SelectItem value="admin">Admin</SelectItem>
+								<SelectItem value="member">Member (website access)</SelectItem>
+								<SelectItem value="admin">
+									Admin (organization-wide access)
+								</SelectItem>
 							</SelectContent>
 						</Select>
+						{role === "admin" ? (
+							<p className="text-muted-foreground text-xs">
+								Admins can access all websites in this organization.
+							</p>
+						) : null}
 					</div>
 
 					<div className="space-y-1 text-xs">

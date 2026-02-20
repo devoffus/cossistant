@@ -130,8 +130,12 @@ export function buildToolStudioSections(tools: StudioTool[]) {
 	);
 
 	return {
-		behaviorTools,
-		actionTools,
+		toggleableBehaviorTools: behaviorTools.filter((tool) => tool.isToggleable),
+		toggleableActionTools: actionTools.filter((tool) => tool.isToggleable),
+		alwaysOnTools: [
+			...behaviorTools.filter((tool) => !tool.isToggleable),
+			...actionTools.filter((tool) => !tool.isToggleable),
+		],
 	};
 }
 

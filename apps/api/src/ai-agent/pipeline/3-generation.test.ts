@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { AI_AGENT_TOOL_CATALOG } from "@cossistant/types";
 import {
+	buildRuntimeSkillDocuments,
 	buildToolCallsByName,
 	getNonFinishToolCallCount,
 	getTotalToolCalls,
@@ -107,5 +109,58 @@ describe("generation tool call accounting", () => {
 			"high.md",
 			"mid.md",
 		]);
+	});
+
+	it("always includes active runtime tool skills with fallback content", () => {
+		const resolveTool = AI_AGENT_TOOL_CATALOG.find(
+			(tool) => tool.id === "resolve"
+		);
+		if (!resolveTool) {
+			throw new Error("Expected resolve tool in catalog");
+		}
+
+		const selected = buildRuntimeSkillDocuments({
+			enabledSkills: [
+				{
+					id: "tool:send-message.md",
+					name: "send-message.md",
+					content: "override send guidance",
+					priority: 6,
+					source: "tool",
+				},
+				{
+					id: "custom:high.md",
+					name: "high.md",
+					content: "custom high",
+					priority: 10,
+					source: "custom",
+				},
+				{
+					id: "custom:mid.md",
+					name: "mid.md",
+					content: "custom mid",
+					priority: 5,
+					source: "custom",
+				},
+			],
+			runtimeToolIds: ["sendMessage", "respond", "resolve"],
+			maxCustomSkills: 1,
+		});
+
+		const byName = new Map(selected.map((skill) => [skill.name, skill]));
+
+		expect(selected.map((skill) => skill.name)).toEqual([
+			"send-message.md",
+			"respond.md",
+			"resolve.md",
+			"high.md",
+		]);
+		expect(byName.get("send-message.md")?.content).toBe(
+			"override send guidance"
+		);
+		expect(byName.get("resolve.md")?.content).toBe(
+			resolveTool.defaultSkill.content
+		);
+		expect(byName.get("high.md")?.source).toBe("custom");
 	});
 });

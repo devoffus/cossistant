@@ -122,7 +122,7 @@ describe("tools-studio-utils", () => {
 		expect(parsed.body).toContain("Escalate when policy is unclear.");
 	});
 
-	it("groups tools by behavior/actions and preserves deterministic order", () => {
+	it("splits tools into toggleable and always-on sections with deterministic order", () => {
 		const tools: GetCapabilitiesStudioResponse["tools"] = [
 			createTool({
 				id: "resolve",
@@ -158,18 +158,29 @@ describe("tools-studio-utils", () => {
 				group: "actions",
 				order: 2,
 			}),
+			createTool({
+				id: "respond",
+				label: "Finish: Respond",
+				group: "actions",
+				order: 1,
+				isRequired: true,
+				isToggleable: false,
+			}),
 		];
 
 		const sections = buildToolStudioSections(tools);
 
-		expect(sections.behaviorTools.map((tool) => tool.id)).toEqual([
-			"searchKnowledgeBase",
+		expect(sections.toggleableBehaviorTools.map((tool) => tool.id)).toEqual([
 			"updateConversationTitle",
-			"sendMessage",
 		]);
-		expect(sections.actionTools.map((tool) => tool.id)).toEqual([
+		expect(sections.toggleableActionTools.map((tool) => tool.id)).toEqual([
 			"escalate",
 			"resolve",
+		]);
+		expect(sections.alwaysOnTools.map((tool) => tool.id)).toEqual([
+			"searchKnowledgeBase",
+			"sendMessage",
+			"respond",
 		]);
 	});
 
@@ -209,7 +220,7 @@ describe("tools-studio-utils", () => {
 		expect(resolveTool?.enabled).toBe(true);
 	});
 
-	it("still produces Behavior and Actions sections from malformed input", () => {
+	it("still produces expected section buckets from malformed input", () => {
 		const normalizedTools = normalizeStudioTools([
 			{
 				id: "sendMessage",
@@ -221,11 +232,16 @@ describe("tools-studio-utils", () => {
 		]);
 
 		const sections = buildToolStudioSections(normalizedTools);
-		expect(
-			sections.behaviorTools.some((tool) => tool.id === "sendMessage")
-		).toBe(true);
-		expect(sections.actionTools.some((tool) => tool.id === "respond")).toBe(
-			true
-		);
+		expect(sections.toggleableBehaviorTools).toHaveLength(3);
+		expect(sections.toggleableActionTools).toHaveLength(3);
+		expect(sections.alwaysOnTools.map((tool) => tool.id)).toEqual([
+			"searchKnowledgeBase",
+			"identifyVisitor",
+			"sendMessage",
+			"sendPrivateMessage",
+			"respond",
+			"skip",
+			"wait",
+		]);
 	});
 });

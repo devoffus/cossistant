@@ -51,12 +51,20 @@ export default function JoinFlow({
 		[callbackPath, inviteTarget, invitedEmail]
 	);
 
-	const { state, errorMessage, retry } = useJoinAcceptance({
+	const {
+		state,
+		errorMessage,
+		retry,
+		accept,
+		reject,
+		isAccepting,
+		isRejecting,
+	} = useJoinAcceptance({
+		organizationSlug,
 		invitationId,
 		invitationStatus,
 		isInvitationValid,
 		isSignedInEmailMatchingInvitation,
-		organizationName,
 	});
 
 	const handleSwitchAccount = async () => {
@@ -79,6 +87,10 @@ export default function JoinFlow({
 				errorMessage={errorMessage}
 				invitationStatus={invitationStatus}
 				invitedEmail={invitedEmail}
+				isAccepting={isAccepting}
+				isRejecting={isRejecting}
+				onAccept={() => void accept()}
+				onReject={() => void reject()}
 				onRetry={retry}
 				onSwitchAccount={handleSwitchAccount}
 				signedInEmail={signedInEmail}

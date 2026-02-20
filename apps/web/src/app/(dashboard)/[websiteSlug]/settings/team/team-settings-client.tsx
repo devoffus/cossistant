@@ -1,6 +1,7 @@
 "use client";
 
 import type { RouterOutputs } from "@cossistant/api/types";
+import { parseCommaSeparatedRoles } from "@cossistant/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -38,6 +39,10 @@ import { useTRPC } from "@/lib/trpc/client";
 type TeamSettings = RouterOutputs["team"]["getSettings"];
 type TeamMember = TeamSettings["members"][number];
 type TeamInvitation = TeamSettings["invitations"][number];
+type PendingRoleChange = {
+	target: TeamMember;
+	nextRole: "member" | "admin";
+};
 
 type TeamSettingsClientProps = {
 	websiteSlug: string;
@@ -51,10 +56,7 @@ function normalizeRole(
 		return "unknown";
 	}
 
-	const normalizedRoles = role
-		.split(",")
-		.map((value) => value.trim().toLowerCase())
-		.filter(Boolean);
+	const normalizedRoles = role ? parseCommaSeparatedRoles(role) : [];
 
 	if (normalizedRoles.includes("owner")) {
 		return "owner";
@@ -131,6 +133,8 @@ export function TeamSettingsClient({
 		useState<TeamMember | null>(null);
 	const [pendingCancelInvitation, setPendingCancelInvitation] =
 		useState<TeamInvitation | null>(null);
+	const [pendingRoleChange, setPendingRoleChange] =
+		useState<PendingRoleChange | null>(null);
 	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
 
 	const settingsQuery = useQuery(
@@ -190,7 +194,7 @@ export function TeamSettingsClient({
 		})
 	);
 
-	const handleRoleChange = async (
+	const handleRoleChange = (
 		target: TeamMember,
 		nextRole: "member" | "admin"
 	) => {
@@ -199,14 +203,27 @@ export function TeamSettingsClient({
 			return;
 		}
 
-		setUpdatingRoleMemberId(target.memberId);
+		setPendingRoleChange({
+			target,
+			nextRole,
+		});
+	};
+
+	const handleConfirmRoleChange = async () => {
+		const pendingChange = pendingRoleChange;
+		if (!pendingChange?.target.memberId) {
+			return;
+		}
+
+		setUpdatingRoleMemberId(pendingChange.target.memberId);
 		try {
 			await updateMemberRole({
 				websiteSlug,
-				memberId: target.memberId,
-				role: nextRole,
+				memberId: pendingChange.target.memberId,
+				role: pendingChange.nextRole,
 			});
-			toast.success(`Role updated to ${nextRole}.`);
+			toast.success(`Organization role updated to ${pendingChange.nextRole}.`);
+			setPendingRoleChange(null);
 		} catch (error) {
 			const message =
 				error instanceof Error ? error.message : "Failed to update role.";
@@ -251,11 +268,19 @@ export function TeamSettingsClient({
 	const handleResendInvitation = async (invitationId: string) => {
 		setResendingInvitationId(invitationId);
 		try {
-			await resendInvitation({
+			const result = await resendInvitation({
 				websiteSlug,
 				invitationId,
 			});
-			toast.success("Invitation resent.");
+
+			if (result.delivery === "sent") {
+				toast.success("Invitation resent.");
+			} else {
+				toast.warning(
+					result.message ??
+						"Invitation was resent, but email delivery failed. Try again."
+				);
+			}
 		} catch (error) {
 			const message =
 				error instanceof Error ? error.message : "Failed to resend invitation.";
@@ -419,6 +444,10 @@ export function TeamSettingsClient({
 										<span className="font-medium text-muted-foreground text-xs">
 											{roleLabel(normalizedRole)}
 										</span>
+										{(normalizedRole === "owner" ||
+											normalizedRole === "admin") && (
+											<Badge variant="secondary">All websites</Badge>
+										)}
 
 										{canManageThisMember && (
 											<DropdownMenu>
@@ -435,7 +464,7 @@ export function TeamSettingsClient({
 															void handleRoleChange(member, "admin")
 														}
 													>
-														Make admin
+														Make organization admin
 													</DropdownMenuItem>
 													<DropdownMenuItem
 														disabled={isUpdating || normalizedRole === "member"}
@@ -443,7 +472,7 @@ export function TeamSettingsClient({
 															void handleRoleChange(member, "member")
 														}
 													>
-														Make member
+														Make organization member
 													</DropdownMenuItem>
 													<DropdownMenuSeparator />
 													<DropdownMenuItem
@@ -476,8 +505,7 @@ export function TeamSettingsClient({
 						<div className="max-h-80 divide-y divide-primary/10 overflow-y-auto pr-1">
 							{settings.invitations.map((invitation) => {
 								const expiresAt = new Date(invitation.expiresAt);
-								const isPending =
-									invitation.status === "pending" && !invitation.isExpired;
+								const isPending = invitation.status === "pending";
 								const isResending = resendingInvitationId === invitation.id;
 								const isCanceling = cancelingInvitationId === invitation.id;
 
@@ -505,6 +533,12 @@ export function TeamSettingsClient({
 															addSuffix: true,
 														})}`}
 											</p>
+											{invitation.isExpired &&
+											invitation.status === "pending" ? (
+												<p className="text-muted-foreground text-xs">
+													Resending will reactivate this invitation.
+												</p>
+											) : null}
 										</div>
 
 										<div className="flex items-center gap-2">
@@ -567,6 +601,43 @@ export function TeamSettingsClient({
 
 			<Dialog
 				onOpenChange={(open) => {
+					if (!(open || updatingRoleMemberId)) {
+						setPendingRoleChange(null);
+					}
+				}}
+				open={Boolean(pendingRoleChange)}
+			>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>Confirm role change</DialogTitle>
+						<DialogDescription>
+							{pendingRoleChange
+								? pendingRoleChange.nextRole === "admin"
+									? `Promote ${pendingRoleChange.target.email} to organization admin? This grants access across all websites.`
+									: `Change ${pendingRoleChange.target.email} to organization member? This removes org-wide admin access across all websites.`
+								: "Confirm role update."}
+						</DialogDescription>
+					</DialogHeader>
+					<DialogFooter>
+						<Button
+							disabled={Boolean(updatingRoleMemberId)}
+							onClick={() => setPendingRoleChange(null)}
+							variant="outline"
+						>
+							Cancel
+						</Button>
+						<Button
+							disabled={Boolean(updatingRoleMemberId)}
+							onClick={() => void handleConfirmRoleChange()}
+						>
+							{updatingRoleMemberId ? "Updating..." : "Confirm"}
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog
+				onOpenChange={(open) => {
 					if (!(open || removingMemberId)) {
 						setPendingRemoveMember(null);
 					}
@@ -578,10 +649,10 @@ export function TeamSettingsClient({
 						<DialogTitle>Remove member access</DialogTitle>
 						<DialogDescription>
 							{pendingRemoveMember
-								? `This will remove ${pendingRemoveMember.email} from this ${
+								? `This will remove ${pendingRemoveMember.email} from ${
 										pendingRemoveMember.accessSource === "team"
-											? "website team"
-											: "organization (all websites)"
+											? "website-only access"
+											: "organization-wide access across all websites"
 									}.`
 								: "Remove member access."}
 						</DialogDescription>

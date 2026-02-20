@@ -3,6 +3,7 @@ import type { Database } from "@api/db";
 import type { WebsiteInsert } from "@api/db/schema";
 import { member, organization, teamMember, website } from "@api/db/schema";
 import { auth } from "@api/lib/auth";
+import { hasAnyRole } from "@cossistant/core";
 import type { WebsiteStatus } from "@cossistant/types/enums";
 
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
@@ -202,18 +203,19 @@ export async function checkUserWebsiteAccess(
 
 	// Check if user is an owner or admin of the organization
 	const [orgMembership] = await db
-		.select()
+		.select({
+			role: member.role,
+		})
 		.from(member)
 		.where(
 			and(
 				eq(member.userId, params.userId),
-				eq(member.organizationId, site.organizationId),
-				inArray(member.role, ["owner", "admin"])
+				eq(member.organizationId, site.organizationId)
 			)
 		)
 		.limit(1);
 
-	if (orgMembership) {
+	if (hasAnyRole(orgMembership?.role ?? null, ["owner", "admin"])) {
 		return { hasAccess: true, website: site };
 	}
 
@@ -286,18 +288,19 @@ export async function getWebsiteByIdWithAccess(
 
 	// Check if user is an owner or admin of the organization
 	const [orgMembership] = await db
-		.select()
+		.select({
+			role: member.role,
+		})
 		.from(member)
 		.where(
 			and(
 				eq(member.userId, params.userId),
-				eq(member.organizationId, site.organizationId),
-				inArray(member.role, ["owner", "admin"])
+				eq(member.organizationId, site.organizationId)
 			)
 		)
 		.limit(1);
 
-	if (orgMembership) {
+	if (hasAnyRole(orgMembership?.role ?? null, ["owner", "admin"])) {
 		return site;
 	}
 

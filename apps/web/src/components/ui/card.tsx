@@ -43,7 +43,7 @@ const CardTitle = ({
 }) => (
 	<h3
 		className={cn(
-			"font-semibold text-lg leading-none tracking-tight",
+			"font-medium text-base leading-none tracking-tight",
 			className
 		)}
 		ref={ref}

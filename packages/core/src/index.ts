@@ -28,6 +28,11 @@ export {
 	toUIMessages,
 } from "./ai-sdk-utils";
 export {
+	hasAnyRole,
+	hasRole,
+	parseCommaSeparatedRoles,
+} from "./auth/roles";
+export {
 	CossistantClient,
 	CossistantClient as default,
 	type CossistantClientOptions,
