@@ -406,23 +406,36 @@ export class CossistantClient {
 				});
 
 				this.conversationsStore.ingestConversation(response.conversation);
-				this.timelineItemsStore.removeTimelineItem(
-					rest.conversationId,
-					optimisticId
+				const createdItems = response.initialTimelineItems;
+				const responsePreservedOptimisticId = createdItems.some(
+					(createdItem) => createdItem.id === optimisticId
 				);
-				this.timelineItemsStore.clearConversation(rest.conversationId);
 
-				this.timelineItemsStore.ingestPage(rest.conversationId, {
-					items: response.initialTimelineItems,
-					hasNextPage: false,
-					nextCursor: undefined,
-				});
+				if (responsePreservedOptimisticId) {
+					// Preferred path: backend preserved the optimistic ID.
+					// Ingest directly so existing references can be reused and UI remains stable.
+					this.timelineItemsStore.ingestPage(rest.conversationId, {
+						items: createdItems,
+						hasNextPage: false,
+						nextCursor: undefined,
+					});
+				} else {
+					// Fallback for mixed rollout: clear optimistic state and hydrate from server truth.
+					this.timelineItemsStore.removeTimelineItem(
+						rest.conversationId,
+						optimisticId
+					);
+					this.timelineItemsStore.clearConversation(rest.conversationId);
+					this.timelineItemsStore.ingestPage(rest.conversationId, {
+						items: createdItems,
+						hasNextPage: false,
+						nextCursor: undefined,
+					});
+				}
 
 				this.pendingConversations.delete(rest.conversationId);
 
-				const item =
-					response.initialTimelineItems.at(-1) ??
-					response.initialTimelineItems[0];
+				const item = createdItems.at(-1) ?? createdItems[0];
 
 				return {
 					item: item as TimelineItem,

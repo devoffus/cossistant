@@ -407,56 +407,54 @@ export default function ToolsPage() {
 
 	const renderToolCard = (tool: StudioTool) => (
 		<Card
-			className={cn("relative border-border/60", {
+			className={cn("relative flex flex-col border-border/60", {
 				"bg-cossistant-blue/5": tool.enabled,
 			})}
 			key={tool.id}
 		>
-			<CardHeader className="space-y-2 p-4">
+			<CardHeader className="space-y-2 p-4 pb-2">
 				<div className="flex items-start justify-between gap-3">
 					<div>
 						<CardTitle className="text-sm">{tool.label}</CardTitle>
 					</div>
-					<div className="absolute top-2 right-2 flex items-center gap-2">
-						{tool.isToggleable ? (
-							<Switch
-								aria-label={`Toggle ${tool.label}`}
-								checked={tool.enabled}
-								disabled={isMutating}
-								onCheckedChange={(checked) =>
-									void handleToggleTool(tool, checked)
-								}
-							/>
-						) : null}
-						<Button
-							aria-label={`Edit ${tool.label} skill`}
+					{tool.isToggleable ? (
+						<Switch
+							aria-label={`Toggle ${tool.label}`}
+							checked={tool.enabled}
 							disabled={isMutating}
-							onClick={() => setEditorTarget({ kind: "tool", toolId: tool.id })}
-							size="icon-small"
-							type="button"
-							variant="ghost"
-						>
-							<Pencil className="size-3.5" />
-						</Button>
-					</div>
+							onCheckedChange={(checked) =>
+								void handleToggleTool(tool, checked)
+							}
+						/>
+					) : null}
 				</div>
 			</CardHeader>
-			<CardContent className="space-y-2 p-4 pt-0">
+			<CardContent className="flex-1 px-4 pt-0">
 				<p className="text-muted-foreground text-sm">{tool.description}</p>
 			</CardContent>
-			{tool.skillHasOverride ? (
-				<CardFooter className="justify-end border-border/50 border-t p-4 pt-3">
+			<CardFooter className="justify-end gap-2 self-end p-4 pt-2">
+				{tool.skillHasOverride ? (
 					<Button
 						disabled={isMutating}
 						onClick={() => void handleResetToolSkill(tool)}
-						size="sm"
+						size="xs"
 						type="button"
-						variant="outline"
+						variant="ghost"
 					>
 						Reset
 					</Button>
-				</CardFooter>
-			) : null}
+				) : null}
+				<Button
+					aria-label={`Edit ${tool.label} skill`}
+					disabled={isMutating}
+					onClick={() => setEditorTarget({ kind: "tool", toolId: tool.id })}
+					size="xs"
+					type="button"
+					variant="outline"
+				>
+					Edit
+				</Button>
+			</CardFooter>
 		</Card>
 	);
 
@@ -871,7 +869,7 @@ export default function ToolsPage() {
 								</CardContent>
 							</Card>
 						) : (
-							<div className="grid gap-4 lg:grid-cols-2">
+							<div className="grid gap-4 lg:grid-cols-3">
 								{toolSections.toggleableBehaviorTools.map((tool) =>
 									renderToolCard(tool)
 								)}
@@ -895,7 +893,7 @@ export default function ToolsPage() {
 								</CardContent>
 							</Card>
 						) : (
-							<div className="grid gap-4 lg:grid-cols-2">
+							<div className="grid gap-4 lg:grid-cols-3">
 								{toolSections.toggleableActionTools.map((tool) =>
 									renderToolCard(tool)
 								)}
@@ -903,17 +901,17 @@ export default function ToolsPage() {
 						)}
 					</section>
 
-					<section className="space-y-3">
-						<div className="space-y-1">
-							<h2 className="font-medium text-base">Always-on tools</h2>
-							<p className="text-muted-foreground text-sm">
-								Required tools that are always active in agent runs.
-							</p>
-						</div>
-						<div className="grid gap-4 lg:grid-cols-2">
-							{toolSections.alwaysOnTools.map((tool) => renderToolCard(tool))}
-						</div>
-					</section>
+					{/* <section className="space-y-3">
+            <div className="space-y-1">
+              <h2 className="font-medium text-base">Always-on tools</h2>
+              <p className="text-muted-foreground text-sm">
+                Required tools that are always active in agent runs.
+              </p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+              {toolSections.alwaysOnTools.map((tool) => renderToolCard(tool))}
+            </div>
+          </section> */}
 				</div>
 			</PageContent>
 

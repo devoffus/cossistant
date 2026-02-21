@@ -216,7 +216,7 @@ export default function BehaviorPage() {
 				{behaviors.map((behavior) => {
 					const draft = getDraft(behavior);
 					const isDirty = draft !== behavior.content;
-					const isDraftDefault =
+					const isAtDefaultDraft =
 						draft.trim() === behavior.defaultContent.trim();
 
 					return (
@@ -226,7 +226,7 @@ export default function BehaviorPage() {
 							title={behavior.label}
 						>
 							<PromptInput
-								className="border-none"
+								className="border-none py-6"
 								disabled={isMutating}
 								maxLength={50_000}
 								onChange={(value) =>
@@ -240,12 +240,40 @@ export default function BehaviorPage() {
 							/>
 
 							<SettingsRowFooter className="flex items-center justify-between gap-2">
-								<p className="text-muted-foreground text-xs">
-									{behavior.hasOverride
-										? "Using custom behavior override"
-										: "Using default behavior"}
-									{isDraftDefault ? " (default draft)" : " (custom draft)"}
-								</p>
+								<div>
+									{isAtDefaultDraft ? (
+										<div className="flex items-center gap-2">
+											<p className="text-muted-foreground text-xs">Presets:</p>
+											<div className="flex flex-wrap gap-1">
+												{behavior.presets.map((preset) => {
+													const isActivePreset =
+														draft.trim() === preset.content.trim();
+
+													return (
+														<Button
+															className={
+																isActivePreset
+																	? "h-7 px-2 text-foreground text-xs"
+																	: "h-7 px-2 text-muted-foreground text-xs hover:text-foreground"
+															}
+															disabled={isMutating}
+															key={preset.id}
+															onClick={() =>
+																handleApplyPreset(behavior, preset.content)
+															}
+															size="sm"
+															title={preset.description}
+															type="button"
+															variant="ghost"
+														>
+															{preset.label}
+														</Button>
+													);
+												})}
+											</div>
+										</div>
+									) : null}
+								</div>
 								<div className="flex items-center gap-2">
 									<Button
 										disabled={isMutating}

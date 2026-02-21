@@ -3,6 +3,43 @@ import type { CreateConversationResponseBody } from "@cossistant/types/api/conve
 import { ConversationStatus } from "@cossistant/types/enums";
 import { CossistantClient } from "./client";
 
+function createCreateConversationResponse(params: {
+	conversationId: string;
+	visitorId: string;
+	messageId: string;
+	createdAt: string;
+}): CreateConversationResponseBody {
+	return {
+		conversation: {
+			id: params.conversationId,
+			title: "New conversation",
+			createdAt: params.createdAt,
+			updatedAt: params.createdAt,
+			visitorId: params.visitorId,
+			websiteId: "site_123",
+			status: ConversationStatus.OPEN,
+			deletedAt: null,
+		},
+		initialTimelineItems: [
+			{
+				id: params.messageId,
+				conversationId: params.conversationId,
+				organizationId: "org_123",
+				type: "message",
+				text: "Hello",
+				parts: [{ type: "text", text: "Hello" }],
+				visibility: "public",
+				tool: null,
+				userId: null,
+				visitorId: params.visitorId,
+				aiAgentId: null,
+				createdAt: params.createdAt,
+				deletedAt: null,
+			},
+		],
+	};
+}
+
 describe("CossistantClient.isConversationPending", () => {
 	const visitorId = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
@@ -46,35 +83,12 @@ describe("CossistantClient.isConversationPending", () => {
 		const messageId = "msg_123";
 
 		const fetchMock = mock(async () => {
-			const response: CreateConversationResponseBody = {
-				conversation: {
-					id: conversationId,
-					title: "New conversation",
-					createdAt,
-					updatedAt: createdAt,
-					visitorId,
-					websiteId: "site_123",
-					status: ConversationStatus.OPEN,
-					deletedAt: null,
-				},
-				initialTimelineItems: [
-					{
-						id: messageId,
-						conversationId,
-						organizationId: "org_123",
-						type: "message",
-						text: "Hello",
-						parts: [{ type: "text", text: "Hello" }],
-						visibility: "public",
-						tool: null,
-						userId: null,
-						visitorId,
-						aiAgentId: null,
-						createdAt,
-						deletedAt: null,
-					},
-				],
-			};
+			const response = createCreateConversationResponse({
+				conversationId,
+				visitorId,
+				messageId,
+				createdAt,
+			});
 
 			return new Response(JSON.stringify(response), {
 				status: 200,
@@ -104,6 +118,127 @@ describe("CossistantClient.isConversationPending", () => {
 				},
 			});
 
+			expect(client.isConversationPending(conversationId)).toBe(false);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	it("keeps one message copy when server preserves optimistic message id", async () => {
+		const client = new CossistantClient({
+			apiUrl: "https://api.example.com",
+			publicKey: "pk_test",
+		});
+		client.setWebsiteContext("site_123", visitorId);
+
+		const originalFetch = globalThis.fetch;
+		const createdAt = new Date().toISOString();
+		const conversationId = "conv_preserved";
+		const optimisticMessageId = "msg_client_ulid";
+
+		const fetchMock = mock(async () => {
+			const response = createCreateConversationResponse({
+				conversationId,
+				visitorId,
+				messageId: optimisticMessageId,
+				createdAt,
+			});
+
+			return new Response(JSON.stringify(response), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+
+		globalThis.fetch = fetchMock as typeof fetch;
+
+		try {
+			client.initiateConversation({
+				conversationId,
+				visitorId,
+				websiteId: "site_123",
+			});
+
+			await client.sendMessage({
+				conversationId,
+				createIfPending: true,
+				item: {
+					id: optimisticMessageId,
+					text: "Hello",
+					type: "message",
+					visibility: "public",
+					visitorId,
+				},
+			});
+
+			const timelineState = client.timelineItemsStore.getState();
+			const items = timelineState.conversations[conversationId]?.items ?? [];
+			const optimisticCopies = items.filter(
+				(item) => item.id === optimisticMessageId
+			);
+
+			expect(optimisticCopies).toHaveLength(1);
+			expect(client.isConversationPending(conversationId)).toBe(false);
+		} finally {
+			globalThis.fetch = originalFetch;
+		}
+	});
+
+	it("falls back to server items when response ids differ from optimistic id", async () => {
+		const client = new CossistantClient({
+			apiUrl: "https://api.example.com",
+			publicKey: "pk_test",
+		});
+		client.setWebsiteContext("site_123", visitorId);
+
+		const originalFetch = globalThis.fetch;
+		const createdAt = new Date().toISOString();
+		const conversationId = "conv_fallback";
+		const optimisticMessageId = "msg_client_ulid";
+		const serverMessageId = "msg_server_ulid";
+
+		const fetchMock = mock(async () => {
+			const response = createCreateConversationResponse({
+				conversationId,
+				visitorId,
+				messageId: serverMessageId,
+				createdAt,
+			});
+
+			return new Response(JSON.stringify(response), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+
+		globalThis.fetch = fetchMock as typeof fetch;
+
+		try {
+			client.initiateConversation({
+				conversationId,
+				visitorId,
+				websiteId: "site_123",
+			});
+
+			await client.sendMessage({
+				conversationId,
+				createIfPending: true,
+				item: {
+					id: optimisticMessageId,
+					text: "Hello",
+					type: "message",
+					visibility: "public",
+					visitorId,
+				},
+			});
+
+			const timelineState = client.timelineItemsStore.getState();
+			const items = timelineState.conversations[conversationId]?.items ?? [];
+
+			expect(items.some((item) => item.id === optimisticMessageId)).toBe(false);
+			expect(items.filter((item) => item.id === serverMessageId)).toHaveLength(
+				1
+			);
 			expect(client.isConversationPending(conversationId)).toBe(false);
 		} finally {
 			globalThis.fetch = originalFetch;

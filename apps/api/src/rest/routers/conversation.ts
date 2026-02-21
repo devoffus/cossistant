@@ -70,6 +70,7 @@ import { OpenAPIHono, z } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { protectedPublicApiKeyMiddleware } from "../middleware";
 import type { RestContext } from "../types";
+import { mapDefaultTimelineItemForCreation } from "./conversation-default-timeline-item";
 
 type ConversationRow = typeof conversation.$inferSelect;
 type ConversationTimelineItemRow = typeof conversationTimelineItem.$inferSelect;
@@ -250,7 +251,9 @@ conversationRouter.openapi(
 			defaults.length > 0
 				? await Promise.all(
 						defaults.map(async (item) => {
-							if ((item.type ?? "message") === "message") {
+							const preparedItem = mapDefaultTimelineItemForCreation(item);
+
+							if (preparedItem.kind === "message") {
 								return createMessageTimelineItem({
 									db,
 									organizationId: organization.id,
@@ -258,16 +261,15 @@ conversationRouter.openapi(
 									conversationId: conversationRecord.id,
 									conversationOwnerVisitorId: conversationRecord.visitorId,
 									triggerNotificationWorkflow: false,
-									text: item.text ?? "",
-									extraParts:
-										item.parts?.filter((part) => part.type !== "text") ?? [],
-									visibility: item.visibility,
-									userId: item.userId ?? null,
-									aiAgentId: item.aiAgentId ?? null,
-									visitorId: item.visitorId ?? null,
-									createdAt: item.createdAt
-										? new Date(item.createdAt)
-										: undefined,
+									id: preparedItem.input.id,
+									text: preparedItem.input.text,
+									extraParts: preparedItem.input.extraParts,
+									visibility: preparedItem.input.visibility,
+									userId: preparedItem.input.userId,
+									aiAgentId: preparedItem.input.aiAgentId,
+									visitorId: preparedItem.input.visitorId,
+									createdAt: preparedItem.input.createdAt,
+									tool: preparedItem.input.tool,
 								});
 							}
 
@@ -277,18 +279,7 @@ conversationRouter.openapi(
 								websiteId: website.id,
 								conversationId: conversationRecord.id,
 								conversationOwnerVisitorId: conversationRecord.visitorId,
-								item: {
-									type: item.type ?? "message",
-									text: item.text,
-									parts: item.parts,
-									visibility: item.visibility,
-									userId: item.userId ?? null,
-									aiAgentId: item.aiAgentId ?? null,
-									visitorId: item.visitorId ?? null,
-									createdAt: item.createdAt
-										? new Date(item.createdAt)
-										: undefined,
-								},
+								item: preparedItem.input,
 							});
 
 							return { item: createdItem, actor: null };

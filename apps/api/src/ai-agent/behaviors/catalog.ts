@@ -44,21 +44,21 @@ const SMART_DECISION_PRESETS = [
 		label: "Human-first",
 		description:
 			"Prefer observing when a teammate is actively engaged unless the visitor has an unmet need.",
-		content: PROMPT_TEMPLATES.DECISION_POLICY,
+		content: `## Decision Policy
+
+- Priority 1: protect human conversation continuity; if a teammate is actively handling and AI value is unclear, choose observe.
+- Priority 2: resolve clear unmet visitor need; choose respond for unanswered questions or explicit help requests.
+- Priority 3: honor teammate intent; choose respond for clear execution commands and assist_team for internal analysis/handoff.
+- For greetings (hi, hello, hey): prefer respond when humanActive=false — the AI should engage and start the conversation. When humanActive=true, prefer observe.
+- Prefer observe for short acknowledgements (ok, thanks, got it) or banter without a clear need.
+- If uncertain, choose observe.`,
 	},
 	{
 		id: "decision_proactive",
 		label: "Proactive",
 		description:
 			"Bias toward responding when the visitor has open questions, even with light human activity.",
-		content: `## Decision Policy
-
-- Priority 1: resolve unanswered visitor needs quickly; when in doubt about unmet needs, prefer respond.
-- Priority 2: avoid disrupting active human handling only when the teammate is clearly mid-resolution.
-- Priority 3: treat teammate commands as execution requests; choose respond unless explicitly told to only observe.
-- For greetings and opening messages: prefer respond unless a human is currently leading the conversation.
-- Prefer observe for short acknowledgements (ok, thanks, got it) without a new question.
-- If uncertain between respond and observe, choose respond with a concise, high-signal reply.`,
+		content: PROMPT_TEMPLATES.DECISION_POLICY,
 	},
 	{
 		id: "decision_guarded",

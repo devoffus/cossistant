@@ -4,7 +4,7 @@ import {
 	ConversationTimelineType,
 	TimelineItemVisibility,
 } from "@cossistant/types/enums";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useSupport } from "../provider";
 import { useIdentificationState } from "../support/context/identification";
 import { useWebSocketSafe } from "../support/context/websocket";
@@ -134,25 +134,31 @@ export function useConversationPage(
 		initialConversationId,
 		onConversationCreated: onConversationIdChange,
 	});
+	const {
+		conversationId: conversationLifecycleId,
+		isPending: isPendingConversation,
+		realConversationId,
+		setConversationId,
+	} = lifecycle;
 
 	// 2. Get default timeline items for pending state
 	const defaultTimelineItems = useDefaultMessages({
-		conversationId: lifecycle.conversationId,
+		conversationId: conversationLifecycleId,
 	});
 
 	const effectiveDefaultTimelineItems = hasInitialMessage
 		? []
 		: defaultTimelineItems;
 
+	const hasRealConversationId = Boolean(realConversationId);
 	const isPendingConversationBootstrap = Boolean(
-		lifecycle.realConversationId &&
-			client?.isConversationPending(lifecycle.realConversationId)
+		realConversationId && client?.isConversationPending(realConversationId)
 	);
 	const shouldEnableConversationNetworkSync =
-		Boolean(lifecycle.realConversationId) && !isPendingConversationBootstrap;
+		hasRealConversationId && !isPendingConversationBootstrap;
 
 	// 3. Fetch timeline items from backend if real conversation exists
-	const timelineQuery = useConversationTimelineItems(lifecycle.conversationId, {
+	const timelineQuery = useConversationTimelineItems(conversationLifecycleId, {
 		enabled: shouldEnableConversationNetworkSync,
 	});
 
@@ -163,8 +169,11 @@ export function useConversationPage(
 			return timelineQuery.items;
 		}
 
-		// If pending, use default timeline items
-		if (lifecycle.isPending && effectiveDefaultTimelineItems.length > 0) {
+		// While pending (or pending bootstrap), keep default messages visible as fallback.
+		if (
+			(isPendingConversation || isPendingConversationBootstrap) &&
+			effectiveDefaultTimelineItems.length > 0
+		) {
 			return effectiveDefaultTimelineItems;
 		}
 
@@ -176,13 +185,14 @@ export function useConversationPage(
 		return [];
 	}, [
 		timelineQuery.items,
-		lifecycle.isPending,
+		isPendingConversation,
+		isPendingConversationBootstrap,
 		effectiveDefaultTimelineItems,
 		passedItems,
 	]);
 
 	const shouldShowIdentificationTool = useMemo(() => {
-		if (lifecycle.isPending) {
+		if (isPendingConversation) {
 			return false;
 		}
 
@@ -206,7 +216,7 @@ export function useConversationPage(
 		);
 	}, [
 		baseItems,
-		lifecycle.isPending,
+		isPendingConversation,
 		visitor?.contact,
 		identificationState?.isIdentifying,
 		availableAIAgents.length,
@@ -223,8 +233,8 @@ export function useConversationPage(
 			"";
 
 		const identificationItem: TimelineItem = {
-			id: `identification-${lifecycle.conversationId}`,
-			conversationId: lifecycle.conversationId,
+			id: `identification-${conversationLifecycleId}`,
+			conversationId: conversationLifecycleId,
 			organizationId,
 			visibility: TimelineItemVisibility.PUBLIC,
 			type: ConversationTimelineType.IDENTIFICATION,
@@ -242,7 +252,7 @@ export function useConversationPage(
 	}, [
 		baseItems,
 		client,
-		lifecycle.conversationId,
+		conversationLifecycleId,
 		shouldShowIdentificationTool,
 		visitor?.id,
 	]);
@@ -263,26 +273,23 @@ export function useConversationPage(
 		return timelineQuery.error;
 	}, [isPendingConversationBootstrap, timelineQuery.error]);
 
+	const handleConversationInitiated = useCallback(
+		(newConversationId: string) => {
+			// Single source of truth for pending -> real conversation transition.
+			if (isPendingConversation) {
+				setConversationId(newConversationId);
+			}
+		},
+		[isPendingConversation, setConversationId]
+	);
+
 	// 5. Set up message composer
 	const composer = useMessageComposer({
 		client: client ?? undefined,
-		conversationId: lifecycle.realConversationId,
+		conversationId: realConversationId,
 		defaultTimelineItems: effectiveDefaultTimelineItems,
 		visitorId: visitor?.id,
-		onConversationInitiated: (newConversationId) => {
-			// Immediately switch to new conversation ID for optimistic updates
-			// This happens BEFORE the API call, so the UI starts reading from
-			// the correct store key right away
-			if (lifecycle.isPending) {
-				lifecycle.setConversationId(newConversationId);
-			}
-		},
-		onMessageSent: (newConversationId) => {
-			// Also handle this for completeness (API call completed)
-			if (lifecycle.isPending) {
-				lifecycle.setConversationId(newConversationId);
-			}
-		},
+		onConversationInitiated: handleConversationInitiated,
 		// Pass WebSocket connection for real-time typing events
 		realtimeSend: websocket?.send ?? null,
 		isRealtimeConnected: websocket?.isConnected ?? false,
@@ -303,7 +310,7 @@ export function useConversationPage(
 			lastInitialMessageRef.current = trimmedInitialMessage;
 		}
 
-		if (!lifecycle.isPending) {
+		if (!isPendingConversation) {
 			return;
 		}
 
@@ -324,7 +331,7 @@ export function useConversationPage(
 		composer.submit();
 	}, [
 		hasInitialMessage,
-		lifecycle.isPending,
+		isPendingConversation,
 		composer.message,
 		composer.setMessage,
 		composer.isSubmitting,
@@ -336,7 +343,7 @@ export function useConversationPage(
 	// 6. Auto-mark messages as seen
 	useConversationAutoSeen({
 		client,
-		conversationId: lifecycle.realConversationId,
+		conversationId: realConversationId,
 		visitorId: visitor?.id,
 		lastTimelineItem,
 		enabled: autoSeenEnabled && shouldEnableConversationNetworkSync,
@@ -344,8 +351,8 @@ export function useConversationPage(
 	});
 
 	return {
-		conversationId: lifecycle.conversationId,
-		isPending: lifecycle.isPending,
+		conversationId: conversationLifecycleId,
+		isPending: isPendingConversation,
 		items: displayItems,
 		isLoading: timelineQuery.isLoading,
 		error: timelineError || composer.error,

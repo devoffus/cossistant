@@ -211,6 +211,31 @@ describe("runSmartDecision", () => {
 		expect(promptArg?.prompt).toContain(customPolicy);
 	});
 
+	it("uses proactive default decision policy text when no override is provided", async () => {
+		const { runSmartDecision } = await modulePromise;
+		const trigger = message("Hey there", {
+			messageId: "msg-default-policy",
+			senderType: "visitor",
+		});
+		const input = buildInput({
+			triggerMessage: trigger,
+			conversationHistory: [trigger],
+		});
+
+		await runSmartDecision(input as never);
+
+		const promptArg = generateTextMock.mock.calls[0]?.[0] as
+			| { prompt?: string }
+			| undefined;
+
+		expect(promptArg?.prompt).toContain(
+			"For greetings (hi, hello, hey): respond proactively when humanActive=false"
+		);
+		expect(promptArg?.prompt).toContain(
+			"If uncertain, choose respond with a concise, useful next step."
+		);
+	});
+
 	it("retries with fallback model on primary timeout", async () => {
 		const { runSmartDecision } = await modulePromise;
 		const timeoutError = new Error("aborted");

@@ -26,9 +26,34 @@ function sortTimelineItems(items: TimelineItem[]): TimelineItem[] {
 }
 
 function isSameTimelineItem(a: TimelineItem, b: TimelineItem): boolean {
+	if (a === b) {
+		return true;
+	}
+
+	if (a.parts.length !== b.parts.length) {
+		return false;
+	}
+
+	for (let index = 0; index < a.parts.length; index++) {
+		const aPart = a.parts[index];
+		const bPart = b.parts[index];
+		if (JSON.stringify(aPart) !== JSON.stringify(bPart)) {
+			return false;
+		}
+	}
+
 	return (
 		a.id === b.id &&
+		a.conversationId === b.conversationId &&
+		a.organizationId === b.organizationId &&
+		a.visibility === b.visibility &&
+		a.type === b.type &&
 		a.text === b.text &&
+		a.tool === b.tool &&
+		a.userId === b.userId &&
+		a.visitorId === b.visitorId &&
+		a.aiAgentId === b.aiAgentId &&
+		a.deletedAt === b.deletedAt &&
 		new Date(a.createdAt).getTime() === new Date(b.createdAt).getTime()
 	);
 }
@@ -54,7 +79,15 @@ function mergeTimelineItems(
 			continue;
 		}
 		const previous = byId.get(item.id);
-		if (!(previous && isSameTimelineItem(previous, item))) {
+		const isIdentical = previous ? isSameTimelineItem(previous, item) : false;
+		if (previous && isIdentical) {
+			// Reuse existing reference when payload is identical so React subscribers
+			// don't re-render on no-op updates (e.g. optimistic + realtime echo).
+			byId.set(item.id, previous);
+			continue;
+		}
+
+		if (!isIdentical) {
 			changed = true;
 		}
 		byId.set(item.id, item);
