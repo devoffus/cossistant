@@ -1,6 +1,17 @@
+import { MenuIcon } from "lucide-react";
 import Link from "next/link";
 
-import { LogoText } from "@/components/ui/logo";
+import { Button } from "@/components/ui/button";
+import { Logo, LogoText } from "@/components/ui/logo";
+import {
+	Sheet,
+	SheetClose,
+	SheetContent,
+	SheetDescription,
+	SheetHeader,
+	SheetTitle,
+	SheetTrigger,
+} from "@/components/ui/sheet";
 import { TopbarButton } from "@/components/ui/topbar-button";
 import {
 	buildSearchAliases,
@@ -131,6 +142,12 @@ export function TopBar({
 	children?: React.ReactNode;
 }) {
 	const searchCatalog = buildSearchCatalog();
+	const navigationLinks = [
+		{ href: "/docs", label: "Docs" },
+		{ href: "/blog", label: "Blog" },
+		{ href: "/pricing", label: "Pricing" },
+		{ href: "/changelog", label: "Changelog" },
+	];
 
 	return (
 		<div
@@ -140,28 +157,68 @@ export function TopBar({
 			)}
 		>
 			<div className="container-wrapper mx-auto">
-				<div className="container mx-auto flex items-center justify-between py-4">
-					<div className="flex w-60 items-center gap-6">
-						<Link className="flex items-center" href="/">
-							<LogoText />
-						</Link>
+				<div className="container mx-auto flex items-center py-4 lg:justify-between">
+					<div className="flex items-center gap-3 sm:gap-6">
+						<Sheet>
+							<SheetTrigger asChild>
+								<Button
+									className="size-8 border border-primary/10 border-dashed md:hidden"
+									size="icon"
+									type="button"
+									variant="ghost"
+								>
+									<MenuIcon className="size-4" />
+									<span className="sr-only">Open navigation menu</span>
+								</Button>
+							</SheetTrigger>
+							<SheetContent className="w-full border-primary/10 border-dashed bg-background p-6 sm:max-w-sm">
+								<SheetHeader>
+									<SheetTitle>Navigation</SheetTitle>
+									<SheetDescription>
+										Browse docs, product pages, and updates.
+									</SheetDescription>
+								</SheetHeader>
+								<div className="mt-6 flex flex-col gap-2 px-2">
+									{navigationLinks.map((link) => (
+										<SheetClose asChild key={link.href}>
+											<Link
+												className="rounded-sm px-2 py-2 font-medium text-sm transition-colors hover:bg-secondary"
+												href={link.href}
+											>
+												{link.label}
+											</Link>
+										</SheetClose>
+									))}
+								</div>
+								{children ? (
+									<div className="mt-6 flex flex-wrap items-center gap-3">
+										{children}
+									</div>
+								) : null}
+							</SheetContent>
+						</Sheet>
+						<div className="w-14 lg:w-[280px]">
+							<Link className="flex items-center" href="/">
+								<LogoText className="hidden lg:flex" />
+								<Logo className="size-5.5 text-primary lg:hidden" />
+							</Link>
+						</div>
 					</div>
-					<div className="hidden items-center space-x-4 md:flex">
-						<TopbarButton className="text-foreground" href="/docs">
-							Docs
-						</TopbarButton>
-						<TopbarButton href="/blog">Blog</TopbarButton>
-						<TopbarButton className="text-foreground" href="/pricing">
-							Pricing
-						</TopbarButton>
-						<TopbarButton className="text-foreground" href="/changelog">
-							Changelog
-						</TopbarButton>
+					<div className="hidden items-center space-x-4 md:flex lg:flex-1 lg:justify-center">
+						{navigationLinks.map((link) => (
+							<TopbarButton
+								className="text-foreground"
+								href={link.href}
+								key={link.href}
+							>
+								{link.label}
+							</TopbarButton>
+						))}
 					</div>
 
-					<div className="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+					<div className="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
 						<SearchBar catalog={searchCatalog} />
-						{children}
+						<div className="hidden items-center gap-2 md:flex">{children}</div>
 					</div>
 				</div>
 			</div>

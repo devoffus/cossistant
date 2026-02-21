@@ -22,13 +22,14 @@ export function FakeDashboard({ className }: { className?: string }) {
 	const play = useLandingAnimationStore((state) => state.play);
 	const pause = useLandingAnimationStore((state) => state.pause);
 	const reset = useLandingAnimationStore((state) => state.reset);
+	const selectView = useLandingAnimationStore((state) => state.selectView);
 	const previousViewRef = useRef<typeof currentView>(currentView);
+	const [showMouseCursor, setShowMouseCursor] = useState(false);
 	const [dashboardRef, isVisible] = useViewportVisibility<HTMLDivElement>({
 		threshold: 0.1,
 		rootMargin: "50px",
 	});
 
-	// Pause animation when not visible
 	useEffect(() => {
 		if (!isVisible && isPlaying) {
 			pause();
@@ -37,8 +38,6 @@ export function FakeDashboard({ className }: { className?: string }) {
 		}
 	}, [isVisible, isPlaying, pause, play, currentView]);
 
-	// Reset and start animation after a short delay to ensure everything is ready
-	// Only run on mount, not on every render
 	useEffect(() => {
 		reset();
 		const timeout = setTimeout(() => {
@@ -48,13 +47,8 @@ export function FakeDashboard({ className }: { className?: string }) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const [showMouseCursor, setShowMouseCursor] = useState(false);
-	const selectView = useLandingAnimationStore((state) => state.selectView);
-
 	const handleMouseClick = useCallback(() => {
-		// Click triggers switch to conversation view
 		setShowMouseCursor(false);
-		// Small delay to ensure cursor animation completes before switching
 		setTimeout(() => {
 			selectView("conversation");
 		}, 100);
@@ -66,7 +60,6 @@ export function FakeDashboard({ className }: { className?: string }) {
 
 	const inboxHook = useFakeInbox({
 		isPlaying: isPlaying && currentView === "inbox",
-		// Don't pass onComplete - let the mouse click handle the view switch
 		onComplete: undefined,
 		onShowMouseCursor:
 			currentView === "inbox" ? handleShowMouseCursor : undefined,
@@ -76,56 +69,31 @@ export function FakeDashboard({ className }: { className?: string }) {
 		isPlaying: isPlaying && currentView === "conversation",
 		onComplete:
 			currentView === "conversation" ? onAnimationComplete : undefined,
+		onConversationResolved: inboxHook.markConversationResolved,
 		initialMessages: inboxHook.inboxMessages,
 	});
 
-	// Reset animation data when restarting
 	useEffect(() => {
-		if (isRestarting) {
-			// Reset all animation data when restart is triggered
-			inboxHook.resetDemoData();
-			conversationHook.resetDemoData();
-			setShowMouseCursor(false);
+		if (!isRestarting) {
+			return;
 		}
-		// Only depend on isRestarting - hook functions are stable
+
+		inboxHook.resetDemoData();
+		conversationHook.resetDemoData();
+		setShowMouseCursor(false);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isRestarting]);
 
-	// Reset animation data when view changes
 	useEffect(() => {
-		const wasInbox = previousViewRef.current === "inbox";
-		const wasConversation = previousViewRef.current === "conversation";
-		const isInbox = currentView === "inbox";
-		const isConversation = currentView === "conversation";
-
-		// Only reset if we're actually switching views (not on initial mount)
 		if (
 			previousViewRef.current !== null &&
 			previousViewRef.current !== currentView
 		) {
-			if (wasInbox && isConversation) {
-				// Switching from inbox to conversation - reset inbox
-				inboxHook.resetDemoData();
-			} else if (wasConversation && isInbox) {
-				// Switching from conversation to inbox - reset conversation and ensure inbox can restart
-				conversationHook.resetDemoData();
-				// Explicitly reset inbox to ensure it can restart
-				inboxHook.resetDemoData();
-				// Force inbox animation to restart by briefly pausing and playing
-				// This ensures the inbox hook's effect re-runs and reschedules
-				if (isPlaying) {
-					pause();
-					setTimeout(() => {
-						play();
-					}, 50);
-				}
-			}
-			// Reset mouse cursor when switching views
 			setShowMouseCursor(false);
 		}
+
 		previousViewRef.current = currentView;
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currentView, isPlaying, play]);
+	}, [currentView]);
 
 	return (
 		<div
@@ -142,13 +110,13 @@ export function FakeDashboard({ className }: { className?: string }) {
 						conversations={inboxHook.conversations}
 						onMouseClick={handleMouseClick}
 						showMouseCursor={showMouseCursor}
-						typingVisitors={inboxHook.typingVisitors}
+						typingActors={inboxHook.typingActors}
 					/>
 				) : (
 					<FakeConversation
 						conversation={conversationHook.conversation}
 						timeline={conversationHook.timelineItems}
-						typingVisitors={conversationHook.typingVisitors}
+						typingActors={conversationHook.typingActors}
 						visitor={conversationHook.visitor}
 					/>
 				)}

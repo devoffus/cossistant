@@ -244,7 +244,7 @@ export function SearchBar({ catalog }: { catalog: SearchCatalogMap }) {
 	return (
 		<>
 			<Button
-				className="h-7 w-[84px] justify-start rounded-none border border-primary/10 border-dashed bg-background px-2 font-normal text-muted-foreground shadow-none hover:bg-background-200 sm:w-[140px] dark:bg-background-50"
+				className="h-7 w-[140px] justify-start rounded-none border border-primary/10 border-dashed bg-background px-2 font-normal text-muted-foreground shadow-none hover:bg-background-200 dark:bg-background-50"
 				onClick={() => setOpen(true)}
 				type="button"
 				variant="ghost"

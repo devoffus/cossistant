@@ -2,7 +2,7 @@ import type { ConversationHeader as ConversationHeaderType } from "@cossistant/t
 import { Page } from "@/components/ui/layout";
 import type { ConversationHeader } from "@/contexts/inboxes";
 import type { ConversationTimelineItem } from "@/data/conversation-message-cache";
-import type { FakeTypingVisitor, FakeVisitor } from "../data";
+import type { FakeTypingActor, FakeVisitor } from "../data";
 import { FakeInboxNavigationSidebar } from "../fake-sidebar/inbox";
 import { FakeVisitorSidebar } from "../fake-sidebar/visitor";
 import { FakeConversationHeader } from "./fake-conversation-header";
@@ -10,19 +10,18 @@ import { FakeConversationTimelineList } from "./fake-conversation-timeline-list"
 import { FakeMultimodalInput } from "./fake-multimodal-input";
 
 type Props = {
-	typingVisitors: FakeTypingVisitor[];
+	typingActors: FakeTypingActor[];
 	conversation: ConversationHeaderType;
 	timeline: ConversationTimelineItem[];
 	visitor: FakeVisitor;
 };
 
 export function FakeConversation({
-	typingVisitors,
+	typingActors,
 	conversation,
 	timeline,
 	visitor,
 }: Props) {
-	// Cast FakeVisitor to ConversationHeader["visitor"] for the timeline
 	const timelineVisitor = visitor as unknown as ConversationHeader["visitor"];
 
 	return (
@@ -36,7 +35,7 @@ export function FakeConversation({
 				<FakeConversationHeader />
 				<FakeConversationTimelineList
 					items={timeline}
-					typingVisitors={typingVisitors}
+					typingActors={typingActors}
 					visitor={timelineVisitor}
 				/>
 				<FakeMultimodalInput />

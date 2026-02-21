@@ -10,30 +10,53 @@ import {
 	type InboxAnalyticsRangeDays,
 } from "@/components/inbox-analytics";
 import { Page, PageHeader, PageHeaderTitle } from "@/components/ui/layout";
+import type { FakeTypingActor } from "../data";
 import { FakeInboxNavigationSidebar } from "../fake-sidebar/inbox";
 import { FakeConversationList } from "./fake-conversation-list";
 import { FakeMouseCursor } from "./fake-mouse-cursor";
 
-type TypingVisitor = {
-	conversationId: string;
-	visitorId: string;
-};
-
 type Props = {
 	conversations: ConversationHeader[];
-	typingVisitors?: TypingVisitor[];
+	typingActors?: FakeTypingActor[];
 	showMouseCursor?: boolean;
 	onMouseClick?: () => void;
 };
 
 export function FakeInbox({
 	conversations,
-	typingVisitors = [],
+	typingActors = [],
 	showMouseCursor = false,
 	onMouseClick,
 }: Props) {
 	const marcConversationRef = useRef<HTMLDivElement>(null);
 	const [rangeDays, setRangeDays] = useState<InboxAnalyticsRangeDays>(7);
+
+	const statusCounts = useMemo(
+		() =>
+			conversations.reduce(
+				(acc, conversation) => {
+					if (conversation.deletedAt) {
+						acc.archived += 1;
+						return acc;
+					}
+
+					if (conversation.status === "resolved" || conversation.resolvedAt) {
+						acc.resolved += 1;
+						return acc;
+					}
+
+					if (conversation.status === "spam") {
+						acc.spam += 1;
+						return acc;
+					}
+
+					acc.open += 1;
+					return acc;
+				},
+				{ open: 0, resolved: 0, spam: 0, archived: 0 }
+			),
+		[conversations]
+	);
 
 	const analyticsData = useMemo<InboxAnalyticsResponse>(
 		() => ({
@@ -67,7 +90,7 @@ export function FakeInbox({
 			<FakeInboxNavigationSidebar
 				activeView="inbox"
 				open
-				statusCounts={{ open: 10, resolved: 0, spam: 0, archived: 0 }}
+				statusCounts={statusCounts}
 			/>
 			<Page className="relative px-0">
 				<PageHeader className="px-4">
@@ -86,7 +109,7 @@ export function FakeInbox({
 					}
 					conversations={conversations}
 					marcConversationRef={marcConversationRef}
-					typingVisitors={typingVisitors}
+					typingActors={typingActors}
 				/>
 				{showMouseCursor && onMouseClick && (
 					<FakeMouseCursor

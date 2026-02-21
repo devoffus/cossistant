@@ -1,30 +1,44 @@
 import type { RouterOutputs } from "@api/trpc/types";
 import type { ConversationHeader } from "@cossistant/types";
+import { ConversationStatus } from "@cossistant/types";
 
-export type FakeVisitor = RouterOutputs["conversation"]["getVisitorById"];
+export type FakeVisitor = NonNullable<
+	RouterOutputs["conversation"]["getVisitorById"]
+>;
 
+export type FakeTypingActor = {
+	conversationId: string;
+	actorType: "visitor" | "ai_agent";
+	actorId: string;
+	preview: string | null;
+};
+
+// Kept for fake-support-widget compatibility.
 export type FakeTypingVisitor = {
 	conversationId: string;
 	visitorId: string;
 	preview: string | null;
 };
 
-// Fake data for landing page demo
-const now = new Date();
-const daysAgo = (days: number, hours = 0) => {
-	const date = new Date(now);
-	date.setDate(date.getDate() - days);
-	date.setHours(date.getHours() - hours);
-	return date.toISOString();
-};
+const ORGANIZATION_ID = "01JGORG11111111111111111";
+const WEBSITE_ID = "01JGWEB11111111111111111";
+const ANTHONY_RIERA_ID = "01JGUSER1111111111111111";
+export const MARC_CONVERSATION_ID = "01JGAA2222222222222222222";
+export const MARC_VISITOR_ID = "01JGVIS22222222222222222";
 
-const minutesAgo = (minutes: number) => {
-	const date = new Date(now);
-	date.setMinutes(date.getMinutes() - minutes);
-	return date.toISOString();
-};
+export const fakeAIAgent = {
+	id: "01JGAIA11111111111111111",
+	name: "Cossistant AI",
+	image: null,
+} as const;
 
-// Helper to create a full visitor object with metadata
+const now = Date.now();
+
+const msAgo = (ms: number) => new Date(now - ms).toISOString();
+const minutesAgo = (minutes: number) => msAgo(minutes * 60 * 1000);
+const hoursAgo = (hours: number) => msAgo(hours * 60 * 60 * 1000);
+const daysAgo = (days: number) => msAgo(days * 24 * 60 * 60 * 1000);
+
 const createFakeVisitor = (partial: {
 	id: string;
 	lastSeenAt: string;
@@ -69,10 +83,10 @@ const createFakeVisitor = (partial: {
 		screenResolution: null,
 		viewport: partial.viewport ?? null,
 		createdAt: daysAgo(30),
-		updatedAt: now.toISOString(),
+		updatedAt: new Date(now).toISOString(),
 		lastSeenAt: partial.lastSeenAt,
-		websiteId: "01JGWEB11111111111111111",
-		organizationId: "01JGORG11111111111111111",
+		websiteId: WEBSITE_ID,
+		organizationId: ORGANIZATION_ID,
 		blockedAt: null,
 		blockedByUserId: null,
 		isBlocked: false,
@@ -82,463 +96,197 @@ const createFakeVisitor = (partial: {
 		deletedAt: null,
 	}) as FakeVisitor;
 
-const fakeVisitors: FakeVisitor[] = [];
+const createMessageTimelineItem = (params: {
+	id: string;
+	conversationId: string;
+	text: string;
+	createdAt: string;
+	visitorId?: string | null;
+	userId?: string | null;
+	aiAgentId?: string | null;
+}) => ({
+	id: params.id,
+	conversationId: params.conversationId,
+	organizationId: ORGANIZATION_ID,
+	visibility: "public" as const,
+	type: "message" as const,
+	text: params.text,
+	parts: [{ type: "text" as const, text: params.text }],
+	userId: params.userId ?? null,
+	visitorId: params.visitorId ?? null,
+	aiAgentId: params.aiAgentId ?? null,
+	createdAt: params.createdAt,
+	deletedAt: null,
+});
 
-const fakeConversations: ConversationHeader[] = [
-	{
-		id: "01JGAA1111111111111111111",
-		status: "open",
-		priority: "normal",
-		organizationId: "01JGORG11111111111111111",
-		visitorId: "01JGVIS11111111111111111",
-		visitor: createFakeVisitor({
-			id: "01JGVIS11111111111111111",
-			lastSeenAt: minutesAgo(2),
-			contact: {
-				id: "01JGCON11111111111111111",
-				name: "Pieter Levels",
-				email: "pieter@nomadlist.com",
-				image: null,
-			},
-			browser: "Chrome",
-			browserVersion: "120.0",
-			os: "macOS",
-			osVersion: "14.2",
-			device: "MacBook Pro",
-			deviceType: "desktop",
-			country: "Thailand",
-			countryCode: "TH",
-			city: "Chiang Mai",
-			region: "Chiang Mai Province",
-			timezone: "Asia/Bangkok",
-			language: "en-US",
-			ip: "123.45.67.89",
-			viewport: "1920x1080",
-		}) as ConversationHeader["visitor"],
-		websiteId: "01JGWEB11111111111111111",
+const createConversation = (params: {
+	id: string;
+	visitor: FakeVisitor;
+	title: string;
+	status?: ConversationHeader["status"];
+	priority?: ConversationHeader["priority"];
+	startedAt: string;
+	updatedAt?: string;
+	lastSeenAt?: string | null;
+	lastTimelineItem: ConversationHeader["lastTimelineItem"];
+	escalatedAt?: string | null;
+	escalationHandledAt?: string | null;
+	resolvedAt?: string | null;
+	resolvedByUserId?: string | null;
+	resolvedByAiAgentId?: string | null;
+}): ConversationHeader => {
+	const updatedAt =
+		params.updatedAt ?? params.lastTimelineItem?.createdAt ?? params.startedAt;
+	const resolvedAt = params.resolvedAt ?? null;
+
+	return {
+		id: params.id,
+		status: params.status ?? ConversationStatus.OPEN,
+		priority: params.priority ?? "normal",
+		organizationId: ORGANIZATION_ID,
+		visitorId: params.visitor.id,
+		visitor: params.visitor as ConversationHeader["visitor"],
+		websiteId: WEBSITE_ID,
 		channel: "widget",
-		title: "Billing question about annual plan",
-		resolutionTime: null,
-		startedAt: daysAgo(0, 3),
-		firstResponseAt: daysAgo(0, 2),
-		resolvedAt: null,
-		resolvedByUserId: null,
-		resolvedByAiAgentId: null,
-		escalatedAt: null,
-		escalatedByAiAgentId: null,
-		escalationReason: null,
-		escalationHandledAt: null,
-		escalationHandledByUserId: null,
-		aiPausedUntil: null,
-		createdAt: daysAgo(0, 3),
-		updatedAt: daysAgo(0, 3),
-		deletedAt: null,
-		lastMessageAt: daysAgo(0, 3),
-		lastSeenAt: null,
-		visitorRating: null,
-		visitorRatingAt: null,
-		lastMessageTimelineItem: {
-			id: "01JGTIM11111111111111111",
-			conversationId: "01JGAA1111111111111111111",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "Can I upgrade to the annual plan and get the discount applied retroactively?",
-			parts: [
-				{
-					type: "text",
-					text: "Can I upgrade to the annual plan and get the discount applied retroactively?",
-				},
-			],
-			userId: null,
-			visitorId: "01JGVIS11111111111111111",
-			aiAgentId: null,
-			createdAt: daysAgo(0, 3),
-			deletedAt: null,
-		},
-		lastTimelineItem: {
-			id: "01JGTIM11111111111111111",
-			conversationId: "01JGAA1111111111111111111",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "Can I upgrade to the annual plan and get the discount applied retroactively?",
-			parts: [
-				{
-					type: "text",
-					text: "Can I upgrade to the annual plan and get the discount applied retroactively?",
-				},
-			],
-			userId: null,
-			visitorId: "01JGVIS11111111111111111",
-			aiAgentId: null,
-			createdAt: daysAgo(0, 3),
-			deletedAt: null,
-		},
-		viewIds: [],
-		seenData: [],
-	},
-	{
-		id: "01JGAA3333333333333333333",
-		status: "resolved",
-		priority: "normal",
-		organizationId: "01JGORG11111111111111111",
-		visitorId: "01JGVIS33333333333333333",
-		visitor: createFakeVisitor({
-			id: "01JGVIS33333333333333333",
-			lastSeenAt: minutesAgo(45),
-			contact: {
-				id: "01JGCON33333333333333333",
-				name: "Tony Dinh",
-				email: "tony@blackmagic.so",
-				image: null,
-			},
-			browser: "Safari",
-			browserVersion: "17.2",
-			os: "macOS",
-			osVersion: "14.1",
-			device: "MacBook Air",
-			deviceType: "desktop",
-			country: "Vietnam",
-			countryCode: "VN",
-			city: "Ho Chi Minh City",
-			region: "Ho Chi Minh",
-			timezone: "Asia/Ho_Chi_Minh",
-			language: "en-US",
-			ip: "98.76.54.32",
-			viewport: "1440x900",
-		}) as ConversationHeader["visitor"],
-		websiteId: "01JGWEB11111111111111111",
-		channel: "widget",
-		title: "How to customize widget colors?",
-		resolutionTime: 3_600_000,
-		startedAt: daysAgo(2, 5),
-		firstResponseAt: daysAgo(2, 4),
-		resolvedAt: daysAgo(2, 1),
-		resolvedByUserId: "01JGUSER1111111111111111",
-		resolvedByAiAgentId: null,
-		escalatedAt: null,
-		escalatedByAiAgentId: null,
-		escalationReason: null,
-		escalationHandledAt: null,
-		escalationHandledByUserId: null,
-		aiPausedUntil: null,
-		createdAt: daysAgo(2, 5),
-		updatedAt: daysAgo(2, 1),
-		deletedAt: null,
-		lastMessageAt: daysAgo(2, 1),
-		lastSeenAt: null,
-		visitorRating: null,
-		visitorRatingAt: null,
-		lastMessageTimelineItem: {
-			id: "01JGTIM33333333333333333",
-			conversationId: "01JGAA3333333333333333333",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "Perfect! Exactly what I needed. Thanks!",
-			parts: [
-				{ type: "text", text: "Perfect! Exactly what I needed. Thanks!" },
-			],
-			userId: null,
-			visitorId: "01JGVIS33333333333333333",
-			aiAgentId: null,
-			createdAt: daysAgo(2, 1),
-			deletedAt: null,
-		},
-		lastTimelineItem: {
-			id: "01JGTIM33333333333333333",
-			conversationId: "01JGAA3333333333333333333",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "Perfect! Exactly what I needed. Thanks!",
-			parts: [
-				{ type: "text", text: "Perfect! Exactly what I needed. Thanks!" },
-			],
-			userId: null,
-			visitorId: "01JGVIS33333333333333333",
-			aiAgentId: null,
-			createdAt: daysAgo(2, 1),
-			deletedAt: null,
-		},
-		viewIds: [],
-		seenData: [],
-	},
-	{
-		id: "01JGAA4444444444444444444",
-		status: "open",
-		priority: "urgent",
-		organizationId: "01JGORG11111111111111111",
-		visitorId: "01JGVIS44444444444444444",
-		visitor: createFakeVisitor({
-			id: "01JGVIS44444444444444444",
-			lastSeenAt: now.toISOString(),
-			contact: {
-				id: "01JGCON44444444444444444",
-				name: "Nico Jeannen",
-				email: "nico@indie.page",
-				image: null,
-			},
-			browser: "Firefox",
-			browserVersion: "121.0",
-			os: "Windows",
-			osVersion: "11",
-			device: "Desktop PC",
-			deviceType: "desktop",
-			country: "France",
-			countryCode: "FR",
-			city: "Paris",
-			region: "Île-de-France",
-			timezone: "Europe/Paris",
-			language: "fr-FR",
-			ip: "185.23.45.67",
-			viewport: "2560x1440",
-		}) as ConversationHeader["visitor"],
-		websiteId: "01JGWEB11111111111111111",
-		channel: "widget",
-		title: "Can't access dashboard after payment",
-		resolutionTime: null,
-		startedAt: daysAgo(0, 12),
+		title: params.title,
+		resolutionTime:
+			resolvedAt && params.lastTimelineItem
+				? Math.max(
+						0,
+						Date.parse(resolvedAt) -
+							Date.parse(params.lastTimelineItem.createdAt)
+					)
+				: null,
+		startedAt: params.startedAt,
 		firstResponseAt: null,
-		resolvedAt: null,
-		resolvedByUserId: null,
-		resolvedByAiAgentId: null,
-		escalatedAt: null,
-		escalatedByAiAgentId: null,
-		escalationReason: null,
-		escalationHandledAt: null,
+		resolvedAt,
+		resolvedByUserId: params.resolvedByUserId ?? null,
+		resolvedByAiAgentId: params.resolvedByAiAgentId ?? null,
+		escalatedAt: params.escalatedAt ?? null,
+		escalatedByAiAgentId: params.escalatedAt ? fakeAIAgent.id : null,
+		escalationReason: params.escalatedAt
+			? "Billing migration requires manual review"
+			: null,
+		escalationHandledAt: params.escalationHandledAt ?? null,
 		escalationHandledByUserId: null,
 		aiPausedUntil: null,
-		createdAt: daysAgo(0, 12),
-		updatedAt: daysAgo(0, 12),
+		createdAt: params.startedAt,
+		updatedAt,
 		deletedAt: null,
-		lastMessageAt: daysAgo(0, 12),
-		lastSeenAt: null,
+		lastMessageAt: params.lastTimelineItem?.createdAt ?? params.startedAt,
+		lastSeenAt: params.lastSeenAt ?? null,
 		visitorRating: null,
 		visitorRatingAt: null,
-		lastMessageTimelineItem: {
-			id: "01JGTIM44444444444444444",
-			conversationId: "01JGAA4444444444444444444",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "I just paid for the annual plan but still see the free tier in my dashboard. Help!",
-			parts: [
-				{
-					type: "text",
-					text: "I just paid for the annual plan but still see the free tier in my dashboard. Help!",
-				},
-			],
-			userId: null,
-			visitorId: "01JGVIS44444444444444444",
-			aiAgentId: null,
-			createdAt: daysAgo(0, 12),
-			deletedAt: null,
-		},
-		lastTimelineItem: {
-			id: "01JGTIM44444444444444444",
-			conversationId: "01JGAA4444444444444444444",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "I just paid for the annual plan but still see the free tier in my dashboard. Help!",
-			parts: [
-				{
-					type: "text",
-					text: "I just paid for the annual plan but still see the free tier in my dashboard. Help!",
-				},
-			],
-			userId: null,
-			visitorId: "01JGVIS44444444444444444",
-			aiAgentId: null,
-			createdAt: daysAgo(0, 12),
-			deletedAt: null,
-		},
+		lastMessageTimelineItem: params.lastTimelineItem,
+		lastTimelineItem: params.lastTimelineItem,
 		viewIds: [],
 		seenData: [],
+	};
+};
+
+const pieterVisitor = createFakeVisitor({
+	id: "01JGVIS11111111111111111",
+	lastSeenAt: minutesAgo(35),
+	contact: {
+		id: "01JGCON11111111111111111",
+		name: "Pieter Levels",
+		email: "pieter@nomadlist.com",
+		image: null,
 	},
-	{
-		id: "01JGAA5555555555555555555",
-		status: "open",
-		priority: "normal",
-		organizationId: "01JGORG11111111111111111",
-		visitorId: "01JGVIS55555555555555555",
-		visitor: createFakeVisitor({
-			id: "01JGVIS55555555555555555",
-			lastSeenAt: minutesAgo(120),
-			contact: {
-				id: "01JGCON55555555555555555",
-				name: "Danny Postma",
-				email: "danny@landingfolio.com",
-				image: null,
-			},
-			browser: "Chrome",
-			browserVersion: "120.0",
-			os: "macOS",
-			osVersion: "14.3",
-			device: "iMac",
-			deviceType: "desktop",
-			country: "Netherlands",
-			countryCode: "NL",
-			city: "Amsterdam",
-			region: "North Holland",
-			timezone: "Europe/Amsterdam",
-			language: "nl-NL",
-			ip: "84.124.78.90",
-			viewport: "2560x1440",
-		}) as ConversationHeader["visitor"],
-		websiteId: "01JGWEB11111111111111111",
-		channel: "widget",
-		title: "Feature request: Dark mode support",
-		resolutionTime: null,
-		startedAt: daysAgo(1, 8),
-		firstResponseAt: daysAgo(1, 7),
-		resolvedAt: null,
-		resolvedByUserId: null,
-		resolvedByAiAgentId: null,
-		escalatedAt: null,
-		escalatedByAiAgentId: null,
-		escalationReason: null,
-		escalationHandledAt: null,
-		escalationHandledByUserId: null,
-		aiPausedUntil: null,
-		createdAt: daysAgo(1, 8),
-		updatedAt: daysAgo(1, 6),
-		deletedAt: null,
-		lastMessageAt: daysAgo(1, 6),
-		lastSeenAt: null,
-		visitorRating: null,
-		visitorRatingAt: null,
-		lastMessageTimelineItem: {
-			id: "01JGTIM55555555555555555",
-			conversationId: "01JGAA5555555555555555555",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "We're adding dark mode support in the next release! I'll update you when it's ready.",
-			parts: [
-				{
-					type: "text",
-					text: "We're adding dark mode support in the next release! I'll update you when it's ready.",
-				},
-			],
-			userId: "01JGUSER1111111111111111",
-			visitorId: null,
-			aiAgentId: null,
-			createdAt: daysAgo(1, 6),
-			deletedAt: null,
-		},
-		lastTimelineItem: {
-			id: "01JGTIM55555555555555555",
-			conversationId: "01JGAA5555555555555555555",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "We're adding dark mode support in the next release! I'll update you when it's ready.",
-			parts: [
-				{
-					type: "text",
-					text: "We're adding dark mode support in the next release! I'll update you when it's ready.",
-				},
-			],
-			userId: "01JGUSER1111111111111111",
-			visitorId: null,
-			aiAgentId: null,
-			createdAt: daysAgo(1, 6),
-			deletedAt: null,
-		},
-		viewIds: [],
-		seenData: [],
+	browser: "Chrome",
+	browserVersion: "121.0",
+	os: "macOS",
+	osVersion: "14.3",
+	device: "MacBook Pro",
+	deviceType: "desktop",
+	country: "Thailand",
+	countryCode: "TH",
+	city: "Chiang Mai",
+	region: "Chiang Mai Province",
+	timezone: "Asia/Bangkok",
+	language: "en-US",
+	ip: "123.45.67.89",
+	viewport: "1920x1080",
+});
+
+const nicoVisitor = createFakeVisitor({
+	id: "01JGVIS44444444444444444",
+	lastSeenAt: minutesAgo(3),
+	contact: {
+		id: "01JGCON44444444444444444",
+		name: "Nico Jeannen",
+		email: "nico@indie.page",
+		image: null,
 	},
-	{
-		id: "01JGAA6666666666666666666",
-		status: "resolved",
-		priority: "low",
-		organizationId: "01JGORG11111111111111111",
-		visitorId: "01JGVIS66666666666666666",
-		visitor: createFakeVisitor({
-			id: "01JGVIS66666666666666666",
-			lastSeenAt: daysAgo(1),
-			contact: {
-				id: "01JGCON66666666666666666",
-				name: "Damon Chen",
-				email: "damon@testdriver.ai",
-				image: null,
-			},
-			browser: "Edge",
-			browserVersion: "120.0",
-			os: "Windows",
-			osVersion: "11",
-			device: "Surface Laptop",
-			deviceType: "desktop",
-			country: "United States",
-			countryCode: "US",
-			city: "San Francisco",
-			region: "California",
-			timezone: "America/Los_Angeles",
-			language: "en-US",
-			ip: "172.58.23.45",
-			viewport: "1920x1080",
-		}) as ConversationHeader["visitor"],
-		websiteId: "01JGWEB11111111111111111",
-		channel: "widget",
-		title: "Documentation for React integration",
-		resolutionTime: 7_200_000,
-		startedAt: daysAgo(3, 5),
-		firstResponseAt: daysAgo(3, 4),
-		resolvedAt: daysAgo(3, 2),
-		resolvedByUserId: "01JGUSER1111111111111111",
-		resolvedByAiAgentId: null,
-		escalatedAt: null,
-		escalatedByAiAgentId: null,
-		escalationReason: null,
-		escalationHandledAt: null,
-		escalationHandledByUserId: null,
-		aiPausedUntil: null,
-		createdAt: daysAgo(3, 5),
-		updatedAt: daysAgo(3, 2),
-		deletedAt: null,
-		lastMessageAt: daysAgo(3, 2),
-		lastSeenAt: null,
-		visitorRating: null,
-		visitorRatingAt: null,
-		lastMessageTimelineItem: {
-			id: "01JGTIM66666666666666666",
-			conversationId: "01JGAA6666666666666666666",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "Got it working, thank you!",
-			parts: [{ type: "text", text: "Got it working, thank you!" }],
-			userId: null,
-			visitorId: "01JGVIS66666666666666666",
-			aiAgentId: null,
-			createdAt: daysAgo(3, 2),
-			deletedAt: null,
-		},
-		lastTimelineItem: {
-			id: "01JGTIM66666666666666666",
-			conversationId: "01JGAA6666666666666666666",
-			organizationId: "01JGORG11111111111111111",
-			visibility: "public",
-			type: "message",
-			text: "Got it working, thank you!",
-			parts: [{ type: "text", text: "Got it working, thank you!" }],
-			userId: null,
-			visitorId: "01JGVIS66666666666666666",
-			aiAgentId: null,
-			createdAt: daysAgo(3, 2),
-			deletedAt: null,
-		},
-		viewIds: [],
-		seenData: [],
+	browser: "Firefox",
+	browserVersion: "121.0",
+	os: "Windows",
+	osVersion: "11",
+	device: "Desktop PC",
+	deviceType: "desktop",
+	country: "France",
+	countryCode: "FR",
+	city: "Paris",
+	region: "Ile-de-France",
+	timezone: "Europe/Paris",
+	language: "fr-FR",
+	ip: "185.23.45.67",
+	viewport: "2560x1440",
+});
+
+const dannyVisitor = createFakeVisitor({
+	id: "01JGVIS55555555555555555",
+	lastSeenAt: minutesAgo(12),
+	contact: {
+		id: "01JGCON55555555555555555",
+		name: "Danny Postma",
+		email: "danny@landingfolio.com",
+		image: null,
 	},
-];
+	browser: "Safari",
+	browserVersion: "17.2",
+	os: "macOS",
+	osVersion: "14.4",
+	device: "MacBook Air",
+	deviceType: "desktop",
+	country: "Netherlands",
+	countryCode: "NL",
+	city: "Amsterdam",
+	region: "North Holland",
+	timezone: "Europe/Amsterdam",
+	language: "nl-NL",
+	ip: "84.124.78.90",
+	viewport: "1728x1117",
+});
+
+const tonyVisitor = createFakeVisitor({
+	id: "01JGVIS33333333333333333",
+	lastSeenAt: hoursAgo(18),
+	contact: {
+		id: "01JGCON33333333333333333",
+		name: "Tony Dinh",
+		email: "tony@blackmagic.so",
+		image: null,
+	},
+	browser: "Chrome",
+	browserVersion: "121.0",
+	os: "macOS",
+	osVersion: "14.2",
+	device: "MacBook Pro",
+	deviceType: "desktop",
+	country: "Vietnam",
+	countryCode: "VN",
+	city: "Ho Chi Minh City",
+	region: "Ho Chi Minh",
+	timezone: "Asia/Ho_Chi_Minh",
+	language: "en-US",
+	ip: "98.76.54.32",
+	viewport: "1440x900",
+});
 
 export const marcVisitor: FakeVisitor = createFakeVisitor({
-	id: "01JGVIS22222222222222222",
-	lastSeenAt: new Date().toISOString(),
+	id: MARC_VISITOR_ID,
+	lastSeenAt: new Date(now).toISOString(),
 	contact: {
 		id: "01JGCON22222222222222222",
 		name: "Marc Louvion",
@@ -554,86 +302,117 @@ export const marcVisitor: FakeVisitor = createFakeVisitor({
 	country: "France",
 	countryCode: "FR",
 	city: "Paris",
-	region: "Île-de-France",
+	region: "Ile-de-France",
 	timezone: "Europe/Paris",
 	language: "fr-FR",
 	ip: "185.67.89.12",
 	viewport: "1680x1050",
 });
 
-// Marc's conversation that will be added dynamically
-const createMarcConversation = (
+const waitingConversationId = "01JGAA1111111111111111111";
+const needsHumanConversationId = "01JGAA4444444444444444444";
+const otherConversationId = "01JGAA5555555555555555555";
+const resolvedConversationId = "01JGAA3333333333333333333";
+
+export const fakeConversations: ConversationHeader[] = [
+	createConversation({
+		id: needsHumanConversationId,
+		visitor: nicoVisitor,
+		title: "Payment completed but still on free tier",
+		priority: "urgent",
+		status: ConversationStatus.OPEN,
+		startedAt: hoursAgo(10),
+		updatedAt: hoursAgo(1),
+		escalatedAt: hoursAgo(1),
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM44444444444444444",
+			conversationId: needsHumanConversationId,
+			text: "I paid for annual but my dashboard still shows free. Can someone fix this today?",
+			visitorId: nicoVisitor.id,
+			createdAt: hoursAgo(2),
+		}),
+	}),
+	createConversation({
+		id: waitingConversationId,
+		visitor: pieterVisitor,
+		title: "Annual plan invoice copy",
+		priority: "high",
+		status: ConversationStatus.OPEN,
+		startedAt: hoursAgo(14),
+		updatedAt: hoursAgo(13),
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM11111111111111111",
+			conversationId: waitingConversationId,
+			text: "Could you send me the VAT invoice PDF for last month?",
+			visitorId: pieterVisitor.id,
+			createdAt: hoursAgo(13),
+		}),
+	}),
+	createConversation({
+		id: otherConversationId,
+		visitor: dannyVisitor,
+		title: "Dark mode rollout timeline",
+		priority: "normal",
+		status: ConversationStatus.OPEN,
+		startedAt: hoursAgo(3),
+		updatedAt: minutesAgo(24),
+		lastSeenAt: minutesAgo(10),
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM55555555555555555",
+			conversationId: otherConversationId,
+			text: "We just enabled dark mode for all projects. Want me to share the changelog?",
+			aiAgentId: fakeAIAgent.id,
+			createdAt: minutesAgo(24),
+		}),
+	}),
+	createConversation({
+		id: resolvedConversationId,
+		visitor: tonyVisitor,
+		title: "React integration docs",
+		priority: "low",
+		status: ConversationStatus.RESOLVED,
+		startedAt: daysAgo(2),
+		updatedAt: daysAgo(2),
+		resolvedAt: daysAgo(2),
+		resolvedByUserId: ANTHONY_RIERA_ID,
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM33333333333333333",
+			conversationId: resolvedConversationId,
+			text: "Got it working, thanks for the docs link!",
+			visitorId: tonyVisitor.id,
+			createdAt: daysAgo(2),
+		}),
+	}),
+];
+
+export const fakeVisitors: FakeVisitor[] = [
+	pieterVisitor,
+	nicoVisitor,
+	dannyVisitor,
+	tonyVisitor,
+	marcVisitor,
+];
+
+export const createMarcConversation = (
 	messageText: string,
 	timestamp: Date
-): ConversationHeader => ({
-	id: "01JGAA2222222222222222222",
-	status: "open",
-	priority: "high",
-	organizationId: "01JGORG11111111111111111",
-	visitorId: "01JGVIS22222222222222222",
-	visitor: marcVisitor as ConversationHeader["visitor"],
-	websiteId: "01JGWEB11111111111111111",
-	channel: "widget",
-	title: "Widget not loading on production",
-	resolutionTime: null,
-	startedAt: timestamp.toISOString(),
-	firstResponseAt: null,
-	resolvedAt: null,
-	resolvedByUserId: null,
-	resolvedByAiAgentId: null,
-	escalatedAt: null,
-	escalatedByAiAgentId: null,
-	escalationReason: null,
-	escalationHandledAt: null,
-	escalationHandledByUserId: null,
-	aiPausedUntil: null,
-	createdAt: timestamp.toISOString(),
-	updatedAt: timestamp.toISOString(),
-	deletedAt: null,
-	lastMessageAt: timestamp.toISOString(),
-	lastSeenAt: null,
-	visitorRating: null,
-	visitorRatingAt: null,
-	lastMessageTimelineItem: {
-		id: "01JGTIM22222222222222222",
-		conversationId: "01JGAA2222222222222222222",
-		organizationId: "01JGORG11111111111111111",
-		visibility: "public",
-		type: "message",
-		text: messageText,
-		parts: [
-			{
-				type: "text",
-				text: messageText,
-			},
-		],
-		userId: null,
-		visitorId: "01JGVIS22222222222222222",
-		aiAgentId: null,
-		createdAt: timestamp.toISOString(),
-		deletedAt: null,
-	},
-	lastTimelineItem: {
-		id: "01JGTIM22222222222222222",
-		conversationId: "01JGAA2222222222222222222",
-		organizationId: "01JGORG11111111111111111",
-		visibility: "public",
-		type: "message",
-		text: messageText,
-		parts: [
-			{
-				type: "text",
-				text: messageText,
-			},
-		],
-		userId: null,
-		visitorId: "01JGVIS22222222222222222",
-		aiAgentId: null,
-		createdAt: timestamp.toISOString(),
-		deletedAt: null,
-	},
-	viewIds: [],
-	seenData: [],
-});
+): ConversationHeader => {
+	const createdAt = timestamp.toISOString();
 
-export { createMarcConversation, fakeConversations, fakeVisitors };
+	return createConversation({
+		id: MARC_CONVERSATION_ID,
+		visitor: marcVisitor,
+		title: "Widget not loading on production",
+		priority: "high",
+		status: ConversationStatus.OPEN,
+		startedAt: createdAt,
+		updatedAt: createdAt,
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM22222222222222222",
+			conversationId: MARC_CONVERSATION_ID,
+			text: messageText,
+			visitorId: MARC_VISITOR_ID,
+			createdAt,
+		}),
+	});
+};

@@ -23,9 +23,8 @@ import type { ConversationHeader } from "@/contexts/inboxes";
 import type { ConversationTimelineItem } from "@/data/conversation-message-cache";
 import { shouldDisplayToolTimelineItem } from "@/lib/tool-timeline-visibility";
 import { cn } from "@/lib/utils";
-import type { FakeTypingVisitor } from "../data";
+import { type FakeTypingActor, fakeAIAgent } from "../data";
 
-// Helper to extract event part from timeline item (same as real dashboard)
 function extractEventPart(item: TimelineItem): TimelinePartEvent | null {
 	if (item.type !== "event") {
 		return null;
@@ -42,12 +41,11 @@ type FakeConversationTimelineListProps = {
 	items: ConversationTimelineItem[];
 	visitor: ConversationHeader["visitor"];
 	className?: string;
-	typingVisitors: FakeTypingVisitor[];
+	typingActors: FakeTypingActor[];
 };
 
 const ANTHONY_RIERA_ID = "01JGUSER1111111111111111";
 
-// Fake team member data (Anthony Riera)
 const fakeTeamMembers = [
 	{
 		id: ANTHONY_RIERA_ID,
@@ -62,7 +60,6 @@ const fakeTeamMembers = [
 	},
 ];
 
-// Fake available human agents for event rendering
 const fakeAvailableHumanAgents = [
 	{
 		id: ANTHONY_RIERA_ID,
@@ -72,35 +69,48 @@ const fakeAvailableHumanAgents = [
 	},
 ];
 
+const fakeAvailableAIAgents = [fakeAIAgent];
+
 export function FakeConversationTimelineList({
 	items: timelineItems,
 	visitor,
 	className,
-	typingVisitors,
+	typingActors,
 }: FakeConversationTimelineListProps) {
 	const messageListRef = useRef<HTMLDivElement | null>(null);
 
-	// Use the real useGroupedMessages hook (same as dashboard)
 	const { items } = useGroupedMessages({
 		items: timelineItems as unknown as TimelineItem[],
 		seenData: [],
 		currentViewerId: ANTHONY_RIERA_ID,
 	});
 
-	// Convert fake typing visitors to typing entities (same structure as real dashboard)
 	const activeTypingEntities = useMemo<TypingParticipant[]>(
 		() =>
-			typingVisitors
-				.filter((tv) => tv.visitorId === visitor?.id)
-				.map((tv) => ({
-					id: tv.visitorId,
-					type: "visitor" as const,
-					preview: tv.preview,
-				})),
-		[typingVisitors, visitor?.id]
+			typingActors.reduce<TypingParticipant[]>((acc, actor) => {
+				if (actor.actorType === "visitor") {
+					if (actor.actorId !== visitor?.id) {
+						return acc;
+					}
+
+					acc.push({
+						id: actor.actorId,
+						type: "visitor",
+						preview: actor.preview,
+					});
+					return acc;
+				}
+
+				acc.push({
+					id: actor.actorId,
+					type: "ai",
+					preview: actor.preview,
+				});
+				return acc;
+			}, []),
+		[typingActors, visitor?.id]
 	);
 
-	// Auto-scroll when typing indicator appears (same as real dashboard)
 	useEffect(() => {
 		if (!messageListRef.current || activeTypingEntities.length === 0) {
 			return;
@@ -126,17 +136,14 @@ export function FakeConversationTimelineList({
 					<AnimatePresence initial={false} mode="popLayout">
 						{items.map((item, index) => {
 							if (item.type === "timeline_event") {
-								// Extract event data from parts (same as real dashboard)
 								const eventPart = extractEventPart(item.item);
-
-								// Only render if we have valid event data
 								if (!eventPart) {
 									return null;
 								}
 
 								return (
 									<ConversationEvent
-										availableAIAgents={[]}
+										availableAIAgents={fakeAvailableAIAgents}
 										availableHumanAgents={fakeAvailableHumanAgents}
 										createdAt={item.item.createdAt}
 										event={eventPart}
@@ -161,7 +168,7 @@ export function FakeConversationTimelineList({
 
 								return (
 									<TimelineActivityGroup
-										availableAIAgents={[]}
+										availableAIAgents={fakeAvailableAIAgents}
 										currentUserId={ANTHONY_RIERA_ID}
 										group={item}
 										isDeveloperModeEnabled={false}
@@ -176,12 +183,11 @@ export function FakeConversationTimelineList({
 								return null;
 							}
 
-							// Use first timeline item ID as stable key (same as real dashboard)
 							const groupKey = item.items[0]?.id || `group-${index}`;
 
 							return (
 								<TimelineMessageGroup
-									availableAIAgents={[]}
+									availableAIAgents={fakeAvailableAIAgents}
 									currentUserId={ANTHONY_RIERA_ID}
 									items={item.items as unknown as TimelineItem[]}
 									key={groupKey}
@@ -193,11 +199,10 @@ export function FakeConversationTimelineList({
 							);
 						})}
 					</AnimatePresence>
-					{/* Typing indicator (same as real dashboard) */}
 					{activeTypingEntities.length > 0 && (
 						<TypingIndicator
 							activeTypingEntities={activeTypingEntities}
-							availableAIAgents={[]}
+							availableAIAgents={fakeAvailableAIAgents}
 							availableHumanAgents={fakeAvailableHumanAgents}
 							className="mt-2"
 							visitor={visitor}
