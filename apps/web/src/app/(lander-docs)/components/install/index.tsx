@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 export const Install = () => (
 	<section
-		className="mt-40 flex flex-col gap-6 border-primary/10 border-y border-dashed md:gap-12"
+		className="flex flex-col gap-6 border-primary/10 border-y border-dashed md:gap-12"
 		suppressHydrationWarning
 	>
 		<div className="flex w-full flex-1 flex-col-reverse justify-stretch gap-0 lg:flex-row">
@@ -48,7 +48,7 @@ export const Install = () => (
 					</Button>
 				</div>
 			</div>
-			<div className="h-full w-full flex-1 pt-8">
+			<div className="h-full w-full flex-1 pt-8 dark:bg-background-100">
 				<ComponentPreview
 					name="support"
 					sizeClasses="min-h-[450px] md:min-h-[730px]"

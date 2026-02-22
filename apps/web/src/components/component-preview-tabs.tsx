@@ -34,7 +34,7 @@ export function ComponentPreviewTabs({
 					<TabsTrigger value="code">Code</TabsTrigger>
 				</TabsList>
 			</Tabs>
-			<div className="relative w-full max-w-full rounded bg-background p-[3px]">
+			<div className="relative w-full max-w-full rounded p-[3px]">
 				{withOrnament && (
 					<>
 						{/* left */}

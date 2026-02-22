@@ -16,9 +16,7 @@ const CONVERSATION_ID = MARC_CONVERSATION_ID;
 const WORKFLOW_RUN_ID = "01JGWF222222222222222222";
 const AI_ESCALATION_MESSAGE_ID = "01JGTIM22222222222222225";
 const VISITOR_MESSAGE_ID = "01JGTIM22222222222222222";
-const TOOL_SEARCH_PARTIAL_ID = "01JGTOOL22222222222222220";
 const TOOL_SEARCH_RESULT_ID = "01JGTOOL22222222222222221";
-const TOOL_TITLE_PARTIAL_ID = "01JGTOOL22222222222222222";
 const TOOL_TITLE_RESULT_ID = "01JGTOOL22222222222222223";
 const PARTICIPANT_JOINED_EVENT_ID = "01JGEVE22222222222222230";
 const HUMAN_REPLY_MESSAGE_ID = "01JGTIM22222222222222231";
@@ -151,9 +149,7 @@ function createTypingPreview(
 
 function createInitialTimeline(now: number): ConversationTimelineItem[] {
 	const visitorMessageTime = new Date(now - 7 * 60 * 1000);
-	const searchPartialTime = new Date(now - 6 * 60 * 1000 + 15 * 1000);
 	const searchResultTime = new Date(now - 6 * 60 * 1000 + 40 * 1000);
-	const titlePartialTime = new Date(now - 5 * 60 * 1000 + 5 * 1000);
 	const titleResultTime = new Date(now - 5 * 60 * 1000 + 28 * 1000);
 	const escalationTime = new Date(now - 4 * 60 * 1000 + 5 * 1000);
 
@@ -167,19 +163,8 @@ function createInitialTimeline(now: number): ConversationTimelineItem[] {
 			timestamp: visitorMessageTime,
 		}),
 		createToolTimelineItem({
-			id: TOOL_SEARCH_PARTIAL_ID,
-			text: "Checking runbooks and known incidents",
-			toolName: "searchKnowledgeBase",
-			input: {
-				query:
-					"custom domain widget blocked allowlist stale edge cache after DNS verify",
-			},
-			state: "partial",
-			timestamp: searchPartialTime,
-		}),
-		createToolTimelineItem({
 			id: TOOL_SEARCH_RESULT_ID,
-			text: "Matched 3 relevant remediation guides",
+			text: "Found 3 sources",
 			toolName: "searchKnowledgeBase",
 			input: {
 				query:
@@ -212,16 +197,8 @@ function createInitialTimeline(now: number): ConversationTimelineItem[] {
 			timestamp: searchResultTime,
 		}),
 		createToolTimelineItem({
-			id: TOOL_TITLE_PARTIAL_ID,
-			text: "Updating conversation title",
-			toolName: "updateConversationTitle",
-			input: { title: MARC_UPDATED_TITLE },
-			state: "partial",
-			timestamp: titlePartialTime,
-		}),
-		createToolTimelineItem({
 			id: TOOL_TITLE_RESULT_ID,
-			text: `Changed title to "${MARC_UPDATED_TITLE}"`,
+			text: `Updated the title to "${MARC_UPDATED_TITLE}"`,
 			toolName: "updateConversationTitle",
 			input: { title: MARC_UPDATED_TITLE },
 			state: "result",

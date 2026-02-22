@@ -12,16 +12,11 @@ export function FakeNavigationTopbar({ className }: { className?: string }) {
 				<Link className="mr-2" href="/">
 					<Logo className="size-5.5 text-primary" />
 				</Link>
-				<TopbarItem className="pr-1" hideLabelOnMobile href="/agent">
-					<span className="flex items-center gap-1.5">
-						Agent
-						<span className="rounded bg-cossistant-orange px-1.5 py-0.5 font-medium text-[10px] text-white leading-none">
-							AI
-						</span>
-					</span>
-				</TopbarItem>
 			</div>
 			<div className="mr-2 flex items-center gap-3">
+				<TopbarItem className="pr-1" hideLabelOnMobile href="/agent">
+					<span className="flex items-center gap-1.5">Agent</span>
+				</TopbarItem>
 				<TopbarItem hideLabelOnMobile href="/contacts">
 					Contacts
 				</TopbarItem>

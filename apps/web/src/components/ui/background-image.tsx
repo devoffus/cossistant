@@ -1,6 +1,7 @@
 "use client";
 
 import { getImageProps } from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { type AsciiCharacterPalette, AsciiImage } from "./ascii-image";
 
 type BackgroundImageProps = {
@@ -86,6 +87,14 @@ type BackgroundImageProps = {
 	 */
 	resolution?: number;
 	/**
+	 * Desktop ASCII resolution used when `resolution` is not explicitly provided.
+	 */
+	desktopResolution?: number;
+	/**
+	 * Mobile ASCII resolution used when `resolution` is not explicitly provided.
+	 */
+	mobileResolution?: number;
+	/**
 	 * Contrast multiplier for luminance before mapping to characters.
 	 * 1 = neutral, >1 = stronger definition, <1 = softer.
 	 */
@@ -94,6 +103,30 @@ type BackgroundImageProps = {
 	 * Reverse luminance mapping (light areas get dense characters).
 	 */
 	reverse?: boolean;
+	/**
+	 * Show/hide the base responsive image layer.
+	 */
+	showImage?: boolean;
+	/**
+	 * Enable subtle ASCII shimmer motion.
+	 */
+	asciiMotion?: boolean;
+	/**
+	 * Motion intensity (0-1).
+	 */
+	asciiMotionIntensity?: number;
+	/**
+	 * Motion speed multiplier.
+	 */
+	asciiMotionSpeed?: number;
+	/**
+	 * Orange shimmer tint strength (0-1).
+	 */
+	shimmerTintStrength?: number;
+	/**
+	 * CSS variable name used to resolve shimmer tint color.
+	 */
+	shimmerTintColorVar?: string;
 };
 
 /**
@@ -119,12 +152,78 @@ export function BackgroundImage({
 	imgClassName = "",
 	portraitOnMobile = false,
 	asciiOpacity = 0.25,
-	characters = "@%#*+=-:;  ",
-	characterPalette,
-	resolution = 0.15,
-	strength,
+	characters,
+	characterPalette = "detailed",
+	resolution,
+	desktopResolution = 0.06,
+	mobileResolution = 0.08,
+	strength = 1.4,
 	reverse,
+	showImage = true,
+	asciiMotion = true,
+	asciiMotionIntensity = 0.1,
+	asciiMotionSpeed = 1,
+	shimmerTintStrength = 0.2,
+	shimmerTintColorVar = "--cossistant-orange",
 }: BackgroundImageProps) {
+	const [isMobileViewport, setIsMobileViewport] = useState(false);
+	const [shimmerTintColor, setShimmerTintColor] = useState<string>();
+
+	useEffect(() => {
+		if (typeof window === "undefined" || !window.matchMedia) {
+			return;
+		}
+
+		const mobileQuery = window.matchMedia("(max-width: 767px)");
+		const handleViewportChange = () => {
+			setIsMobileViewport(mobileQuery.matches);
+		};
+
+		handleViewportChange();
+
+		if (mobileQuery.addEventListener) {
+			mobileQuery.addEventListener("change", handleViewportChange);
+			return () =>
+				mobileQuery.removeEventListener("change", handleViewportChange);
+		}
+
+		mobileQuery.addListener(handleViewportChange);
+		return () => mobileQuery.removeListener(handleViewportChange);
+	}, []);
+
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		const root = document.documentElement;
+		const updateColor = () => {
+			const resolvedColor = window
+				.getComputedStyle(root)
+				.getPropertyValue(shimmerTintColorVar)
+				.trim();
+			setShimmerTintColor(resolvedColor || undefined);
+		};
+
+		updateColor();
+
+		const observer = new MutationObserver(updateColor);
+		observer.observe(root, {
+			attributes: true,
+			attributeFilter: ["class", "style"],
+		});
+
+		return () => observer.disconnect();
+	}, [shimmerTintColorVar]);
+
+	const effectiveResolution = useMemo(() => {
+		if (typeof resolution === "number") {
+			return resolution;
+		}
+
+		return isMobileViewport ? mobileResolution : desktopResolution;
+	}, [resolution, isMobileViewport, mobileResolution, desktopResolution]);
+
 	const common = {
 		alt,
 		sizes: "100vw",
@@ -163,32 +262,41 @@ export function BackgroundImage({
 	return (
 		<div className={`absolute inset-0 z-0 ${className}`}>
 			{/* Layer 0: Responsive picture element (fallback/base) */}
-			<picture className="absolute inset-0">
-				<source media="(min-width: 1440px)" srcSet={large} />
-				<source media="(min-width: 768px)" srcSet={medium} />
-				<source media="(min-width: 320px)" srcSet={small} />
-				<img
-					{...rest}
-					alt={alt}
-					className={`size-full object-cover grayscale-50 ${
-						portraitOnMobile ? "object-top md:object-center" : ""
-					} ${imgClassName}`}
-					height={largeHeight}
-					style={{ width: "100%", height: "100%" }}
-					width={largeWidth}
-				/>
-			</picture>
+			{showImage ? (
+				<picture className="absolute inset-0">
+					<source media="(min-width: 1440px)" srcSet={large} />
+					<source media="(min-width: 768px)" srcSet={medium} />
+					<source media="(min-width: 320px)" srcSet={small} />
+					<img
+						{...rest}
+						alt={alt}
+						className={`size-full object-cover grayscale-50 ${
+							portraitOnMobile ? "object-top md:object-center" : ""
+						} ${imgClassName}`}
+						height={largeHeight}
+						style={{ width: "100%", height: "100%" }}
+						width={largeWidth}
+					/>
+				</picture>
+			) : null}
 
 			{/* Layer 1: ASCII overlay using largest image for best detail */}
 			<AsciiImage
 				alt={alt}
+				asciiBlendMode={showImage ? undefined : "normal"}
 				asciiOpacity={asciiOpacity}
 				characterPalette={characterPalette}
 				characters={characters}
 				className="absolute inset-0 size-full"
+				imageOpacity={0}
+				motionEnabled={asciiMotion}
+				motionIntensity={asciiMotionIntensity}
+				motionSpeed={asciiMotionSpeed}
 				priority
-				resolution={resolution}
+				resolution={effectiveResolution}
 				reverse={reverse}
+				shimmerTintColor={shimmerTintColor}
+				shimmerTintStrength={shimmerTintStrength}
 				src={largeSrc}
 				strength={strength}
 			/>
