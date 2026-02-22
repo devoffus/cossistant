@@ -6,14 +6,13 @@ import { cn } from "@/lib/utils";
 
 export const Install = () => (
 	<section
-		className="mt-40 flex flex-col gap-6 md:min-h-screen md:gap-12"
+		className="mt-40 flex flex-col gap-6 border-primary/10 border-y border-dashed md:gap-12"
 		suppressHydrationWarning
 	>
-		<div className="lg: flex w-full flex-1 flex-col-reverse items-center gap-0 lg:flex-row">
+		<div className="flex w-full flex-1 flex-col-reverse justify-stretch gap-0 lg:flex-row">
 			<div
 				className={cn(
-					"relative flex flex-1 flex-col justify-center gap-4 overflow-hidden border-primary/10 border-dashed p-4 pt-20 sm:pt-0",
-					"lg:col-span-3"
+					"relative flex flex-col justify-center gap-4 border-primary/10 border-dashed p-4 py-20 lg:border-r"
 				)}
 			>
 				<p className="font-mono text-primary/70 text-xs">{"<Support />"}</p>
@@ -49,11 +48,10 @@ export const Install = () => (
 					</Button>
 				</div>
 			</div>
-			<div className="h-full w-full flex-1">
+			<div className="h-full w-full flex-1 pt-8">
 				<ComponentPreview
 					name="support"
 					sizeClasses="min-h-[450px] md:min-h-[730px]"
-					withOrnament
 				/>
 			</div>
 		</div>

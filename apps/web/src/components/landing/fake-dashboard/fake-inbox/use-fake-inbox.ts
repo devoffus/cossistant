@@ -2,11 +2,9 @@ import type { ConversationHeader } from "@cossistant/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAnimationScheduler } from "@/hooks/use-animation-scheduler";
 import {
-	createMarcConversation,
-	type FakeTypingActor,
-	fakeAIAgent,
+	ANTHONY_RIERA_ID,
+	type FakeConversationHandledPayload,
 	fakeConversations,
-	MARC_CONVERSATION_ID,
 } from "../data";
 
 type UseFakeInboxProps = {
@@ -15,33 +13,30 @@ type UseFakeInboxProps = {
 	onShowMouseCursor?: () => void;
 };
 
-function createResolvedEventTimelineItem(
+const SHOW_INBOX_CURSOR_AT_MS = 2000;
+
+function toHeaderTimelineItem(
 	conversationId: string,
-	resolvedAt: string
+	item: FakeConversationHandledPayload["lastTimelineItem"],
+	fallbackCreatedAt: string
 ): NonNullable<ConversationHeader["lastTimelineItem"]> {
+	const createdAt = item.createdAt || fallbackCreatedAt;
+
 	return {
-		id: `${conversationId}-resolved-event`,
+		id: item.id ?? `${conversationId}-handled-item`,
 		conversationId,
-		organizationId: "01JGORG11111111111111111",
-		visibility: "public",
-		type: "event",
-		text: null,
-		parts: [
-			{
-				type: "event",
-				eventType: "resolved",
-				actorUserId: null,
-				actorAiAgentId: fakeAIAgent.id,
-				targetUserId: null,
-				targetAiAgentId: null,
-				message: null,
-			},
-		],
-		userId: null,
-		visitorId: null,
-		aiAgentId: fakeAIAgent.id,
-		createdAt: resolvedAt,
-		deletedAt: null,
+		organizationId: item.organizationId,
+		visibility: item.visibility,
+		type: item.type,
+		text: item.text,
+		parts: item.parts as NonNullable<
+			ConversationHeader["lastTimelineItem"]
+		>["parts"],
+		userId: item.userId,
+		visitorId: item.visitorId,
+		aiAgentId: item.aiAgentId,
+		createdAt,
+		deletedAt: item.deletedAt ?? null,
 	};
 }
 
@@ -52,10 +47,6 @@ export function useFakeInbox({
 }: UseFakeInboxProps) {
 	const [conversations, setConversations] =
 		useState<ConversationHeader[]>(fakeConversations);
-	const [typingActors, setTypingActors] = useState<FakeTypingActor[]>([]);
-	const [inboxMessages, setInboxMessages] = useState<
-		Array<{ text: string; timestamp: Date }>
-	>([]);
 	const hasScheduledRef = useRef(false);
 	const scheduleRef = useRef<
 		((timeMs: number, callback: () => void) => () => void) | null
@@ -79,38 +70,46 @@ export function useFakeInbox({
 
 	const resetDemoData = useCallback(() => {
 		setConversations(fakeConversations);
-		setTypingActors([]);
-		setInboxMessages([]);
 		resetScheduler();
 		hasScheduledRef.current = false;
 		retryCountRef.current = 0;
 	}, [resetScheduler]);
 
-	const markConversationResolved = useCallback((conversationId: string) => {
-		const resolvedAt = new Date().toISOString();
-		setTypingActors((prev) =>
-			prev.filter((actor) => actor.conversationId !== conversationId)
-		);
-		setConversations((prev) =>
-			prev.map((conversation) => {
-				if (conversation.id !== conversationId) {
-					return conversation;
-				}
+	const markConversationHandledByHuman = useCallback(
+		(payload: FakeConversationHandledPayload) => {
+			const handledAt = payload.handledAt ?? new Date().toISOString();
+			const updatedTimelineItem = toHeaderTimelineItem(
+				payload.conversationId,
+				payload.lastTimelineItem,
+				handledAt
+			);
+			const activityAt = updatedTimelineItem.createdAt;
 
-				return {
-					...conversation,
-					status: "resolved",
-					resolvedAt,
-					resolvedByAiAgentId: fakeAIAgent.id,
-					updatedAt: resolvedAt,
-					lastTimelineItem: createResolvedEventTimelineItem(
-						conversationId,
-						resolvedAt
-					),
-				};
-			})
-		);
-	}, []);
+			setConversations((prev) =>
+				prev.map((conversation) => {
+					if (conversation.id !== payload.conversationId) {
+						return conversation;
+					}
+
+					return {
+						...conversation,
+						status: "open",
+						resolvedAt: null,
+						resolvedByUserId: null,
+						resolvedByAiAgentId: null,
+						escalationHandledAt: handledAt,
+						escalationHandledByUserId: ANTHONY_RIERA_ID,
+						title: payload.title ?? conversation.title,
+						updatedAt: activityAt,
+						lastMessageAt: activityAt,
+						lastTimelineItem: updatedTimelineItem,
+						lastMessageTimelineItem: updatedTimelineItem,
+					};
+				})
+			);
+		},
+		[]
+	);
 
 	useEffect(() => {
 		if (!isPlaying || hasScheduledRef.current) {
@@ -131,41 +130,7 @@ export function useFakeInbox({
 			hasScheduledRef.current = true;
 			retryCountRef.current = 0;
 
-			setConversations((prev) =>
-				prev.filter((conversation) => conversation.id !== MARC_CONVERSATION_ID)
-			);
-
-			currentSchedule(1000, () => {
-				const firstMessageText =
-					"Hey! The widget isn't loading on my production site. It works fine locally though.";
-				const firstTimestamp = new Date();
-				setInboxMessages([
-					{ text: firstMessageText, timestamp: firstTimestamp },
-				]);
-
-				setConversations((prev) => {
-					const withoutMarc = prev.filter(
-						(conversation) => conversation.id !== MARC_CONVERSATION_ID
-					);
-					return [
-						createMarcConversation(firstMessageText, firstTimestamp),
-						...withoutMarc,
-					];
-				});
-			});
-
-			currentSchedule(2200, () => {
-				setTypingActors([
-					{
-						conversationId: MARC_CONVERSATION_ID,
-						actorType: "ai_agent",
-						actorId: fakeAIAgent.id,
-						preview: null,
-					},
-				]);
-			});
-
-			currentSchedule(3600, () => {
+			currentSchedule(SHOW_INBOX_CURSOR_AT_MS, () => {
 				onShowMouseCursorRef.current?.();
 			});
 		};
@@ -175,9 +140,7 @@ export function useFakeInbox({
 
 	return {
 		conversations,
-		typingActors,
 		resetDemoData,
-		inboxMessages,
-		markConversationResolved,
+		markConversationHandledByHuman,
 	};
 }

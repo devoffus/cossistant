@@ -1,6 +1,7 @@
 import type { RouterOutputs } from "@api/trpc/types";
 import type { ConversationHeader } from "@cossistant/types";
 import { ConversationStatus } from "@cossistant/types";
+import type { ConversationTimelineItem } from "@/data/conversation-message-cache";
 
 export type FakeVisitor = NonNullable<
 	RouterOutputs["conversation"]["getVisitorById"]
@@ -13,6 +14,13 @@ export type FakeTypingActor = {
 	preview: string | null;
 };
 
+export type FakeConversationHandledPayload = {
+	conversationId: string;
+	handledAt?: string;
+	lastTimelineItem: ConversationTimelineItem;
+	title?: string | null;
+};
+
 // Kept for fake-support-widget compatibility.
 export type FakeTypingVisitor = {
 	conversationId: string;
@@ -22,9 +30,17 @@ export type FakeTypingVisitor = {
 
 const ORGANIZATION_ID = "01JGORG11111111111111111";
 const WEBSITE_ID = "01JGWEB11111111111111111";
-const ANTHONY_RIERA_ID = "01JGUSER1111111111111111";
+
+export const ANTHONY_RIERA_ID = "01JGUSER1111111111111111";
 export const MARC_CONVERSATION_ID = "01JGAA2222222222222222222";
 export const MARC_VISITOR_ID = "01JGVIS22222222222222222";
+export const PIPELINE_TYPING_CONVERSATION_ID = "01JGAA6666666666666666666";
+
+const WAITING_CONVERSATION_ID = "01JGAA1111111111111111111";
+const NEEDS_HUMAN_CONVERSATION_ID = "01JGAA4444444444444444444";
+const OTHER_CONVERSATION_ID = "01JGAA5555555555555555555";
+const RESOLVED_CONVERSATION_ID = "01JGAA3333333333333333333";
+const OTHER_CONVERSATION_ID_TWO = "01JGAA7777777777777777777";
 
 export const fakeAIAgent = {
 	id: "01JGAIA11111111111111111",
@@ -104,14 +120,14 @@ const createMessageTimelineItem = (params: {
 	visitorId?: string | null;
 	userId?: string | null;
 	aiAgentId?: string | null;
-}) => ({
+}): NonNullable<ConversationHeader["lastTimelineItem"]> => ({
 	id: params.id,
 	conversationId: params.conversationId,
 	organizationId: ORGANIZATION_ID,
-	visibility: "public" as const,
-	type: "message" as const,
+	visibility: "public",
+	type: "message",
 	text: params.text,
-	parts: [{ type: "text" as const, text: params.text }],
+	parts: [{ type: "text", text: params.text }],
 	userId: params.userId ?? null,
 	visitorId: params.visitorId ?? null,
 	aiAgentId: params.aiAgentId ?? null,
@@ -128,9 +144,10 @@ const createConversation = (params: {
 	startedAt: string;
 	updatedAt?: string;
 	lastSeenAt?: string | null;
-	lastTimelineItem: ConversationHeader["lastTimelineItem"];
+	lastTimelineItem: NonNullable<ConversationHeader["lastTimelineItem"]>;
 	escalatedAt?: string | null;
 	escalationHandledAt?: string | null;
+	escalationReason?: string | null;
 	resolvedAt?: string | null;
 	resolvedByUserId?: string | null;
 	resolvedByAiAgentId?: string | null;
@@ -164,11 +181,11 @@ const createConversation = (params: {
 		resolvedByAiAgentId: params.resolvedByAiAgentId ?? null,
 		escalatedAt: params.escalatedAt ?? null,
 		escalatedByAiAgentId: params.escalatedAt ? fakeAIAgent.id : null,
-		escalationReason: params.escalatedAt
-			? "Billing migration requires manual review"
-			: null,
+		escalationReason: params.escalationReason ?? null,
 		escalationHandledAt: params.escalationHandledAt ?? null,
-		escalationHandledByUserId: null,
+		escalationHandledByUserId: params.escalationHandledAt
+			? ANTHONY_RIERA_ID
+			: null,
 		aiPausedUntil: null,
 		createdAt: params.startedAt,
 		updatedAt,
@@ -211,7 +228,7 @@ const pieterVisitor = createFakeVisitor({
 
 const nicoVisitor = createFakeVisitor({
 	id: "01JGVIS44444444444444444",
-	lastSeenAt: minutesAgo(3),
+	lastSeenAt: minutesAgo(6),
 	contact: {
 		id: "01JGCON44444444444444444",
 		name: "Nico Jeannen",
@@ -284,9 +301,59 @@ const tonyVisitor = createFakeVisitor({
 	viewport: "1440x900",
 });
 
+const sarahVisitor = createFakeVisitor({
+	id: "01JGVIS88888888888888888",
+	lastSeenAt: minutesAgo(4),
+	contact: {
+		id: "01JGCON88888888888888888",
+		name: "Sarah Dayan",
+		email: "sarah@frontend.today",
+		image: null,
+	},
+	browser: "Arc",
+	browserVersion: "1.24",
+	os: "macOS",
+	osVersion: "14.5",
+	device: "MacBook Pro",
+	deviceType: "desktop",
+	country: "United Kingdom",
+	countryCode: "GB",
+	city: "London",
+	region: "England",
+	timezone: "Europe/London",
+	language: "en-GB",
+	ip: "91.76.55.101",
+	viewport: "1512x982",
+});
+
+const lucasVisitor = createFakeVisitor({
+	id: "01JGVIS99999999999999999",
+	lastSeenAt: minutesAgo(2),
+	contact: {
+		id: "01JGCON99999999999999999",
+		name: "Lucas Mouilleron",
+		email: "lucas@founderops.dev",
+		image: null,
+	},
+	browser: "Chrome",
+	browserVersion: "122.0",
+	os: "macOS",
+	osVersion: "14.4",
+	device: "MacBook Pro",
+	deviceType: "desktop",
+	country: "Canada",
+	countryCode: "CA",
+	city: "Montreal",
+	region: "Quebec",
+	timezone: "America/Toronto",
+	language: "en-CA",
+	ip: "52.14.23.188",
+	viewport: "1920x1200",
+});
+
 export const marcVisitor: FakeVisitor = createFakeVisitor({
 	id: MARC_VISITOR_ID,
-	lastSeenAt: new Date(now).toISOString(),
+	lastSeenAt: minutesAgo(1),
 	contact: {
 		id: "01JGCON22222222222222222",
 		name: "Marc Louvion",
@@ -309,64 +376,120 @@ export const marcVisitor: FakeVisitor = createFakeVisitor({
 	viewport: "1680x1050",
 });
 
-const waitingConversationId = "01JGAA1111111111111111111";
-const needsHumanConversationId = "01JGAA4444444444444444444";
-const otherConversationId = "01JGAA5555555555555555555";
-const resolvedConversationId = "01JGAA3333333333333333333";
+export const createMarcEscalatedConversation = (): ConversationHeader => {
+	const startedAt = hoursAgo(3.2);
+	const aiEscalationMessageAt = hoursAgo(0.9);
 
-export const fakeConversations: ConversationHeader[] = [
-	createConversation({
-		id: needsHumanConversationId,
-		visitor: nicoVisitor,
-		title: "Payment completed but still on free tier",
+	return createConversation({
+		id: MARC_CONVERSATION_ID,
+		visitor: marcVisitor,
+		title: "Production widget blocked on custom domain",
 		priority: "urgent",
 		status: ConversationStatus.OPEN,
-		startedAt: hoursAgo(10),
-		updatedAt: hoursAgo(1),
-		escalatedAt: hoursAgo(1),
+		startedAt,
+		updatedAt: aiEscalationMessageAt,
+		escalatedAt: hoursAgo(1.1),
+		escalationReason:
+			"AI prepared a safe production patch, but a teammate must deploy and verify it.",
 		lastTimelineItem: createMessageTimelineItem({
-			id: "01JGTIM44444444444444444",
-			conversationId: needsHumanConversationId,
-			text: "I paid for annual but my dashboard still shows free. Can someone fix this today?",
-			visitorId: nicoVisitor.id,
-			createdAt: hoursAgo(2),
+			id: "01JGTIM22222222222222225",
+			conversationId: MARC_CONVERSATION_ID,
+			text: "I traced this to a stale production allowlist and prepared a safe patch. I need a human teammate to deploy and verify it. Please join the conversation.",
+			aiAgentId: fakeAIAgent.id,
+			createdAt: aiEscalationMessageAt,
 		}),
-	}),
+	});
+};
+
+export const fakeConversations: ConversationHeader[] = [
+	createMarcEscalatedConversation(),
 	createConversation({
-		id: waitingConversationId,
-		visitor: pieterVisitor,
-		title: "Annual plan invoice copy",
+		id: NEEDS_HUMAN_CONVERSATION_ID,
+		visitor: nicoVisitor,
+		title: "Annual renewal paid but entitlements still on free plan",
 		priority: "high",
 		status: ConversationStatus.OPEN,
-		startedAt: hoursAgo(14),
-		updatedAt: hoursAgo(13),
+		startedAt: hoursAgo(12),
+		updatedAt: hoursAgo(1.9),
+		escalatedAt: hoursAgo(2.4),
+		escalationReason:
+			"AI can reconcile entitlements, but backdated credit approval needs a human decision.",
 		lastTimelineItem: createMessageTimelineItem({
-			id: "01JGTIM11111111111111111",
-			conversationId: waitingConversationId,
-			text: "Could you send me the VAT invoice PDF for last month?",
-			visitorId: pieterVisitor.id,
-			createdAt: hoursAgo(13),
+			id: "01JGTIM44444444444444444",
+			conversationId: NEEDS_HUMAN_CONVERSATION_ID,
+			text: "I found a Stripe webhook race and prepared the entitlement fix. A human needs to approve the prorated credit before I apply it.",
+			aiAgentId: fakeAIAgent.id,
+			createdAt: hoursAgo(1.9),
 		}),
 	}),
 	createConversation({
-		id: otherConversationId,
+		id: WAITING_CONVERSATION_ID,
+		visitor: pieterVisitor,
+		title: "Webhook failures since 02:17 UTC",
+		priority: "normal",
+		status: ConversationStatus.OPEN,
+		startedAt: hoursAgo(14),
+		updatedAt: hoursAgo(12.8),
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM11111111111111111",
+			conversationId: WAITING_CONVERSATION_ID,
+			text: "We're still seeing checkout.completed failures in production. Can you export the failed event IDs so we can reconcile?",
+			visitorId: pieterVisitor.id,
+			createdAt: hoursAgo(12.8),
+		}),
+	}),
+	createConversation({
+		id: OTHER_CONVERSATION_ID,
 		visitor: dannyVisitor,
-		title: "Dark mode rollout timeline",
+		title: "Staging signature mismatch after secret rotation",
 		priority: "normal",
 		status: ConversationStatus.OPEN,
 		startedAt: hoursAgo(3),
-		updatedAt: minutesAgo(24),
+		updatedAt: minutesAgo(26),
 		lastSeenAt: minutesAgo(10),
 		lastTimelineItem: createMessageTimelineItem({
 			id: "01JGTIM55555555555555555",
-			conversationId: otherConversationId,
-			text: "We just enabled dark mode for all projects. Want me to share the changelog?",
+			conversationId: OTHER_CONVERSATION_ID,
+			text: "I rotated the staging signing secret and replayed the last 20 failed events. If you want, I can stage the same runbook for production.",
 			aiAgentId: fakeAIAgent.id,
-			createdAt: minutesAgo(24),
+			createdAt: minutesAgo(26),
 		}),
 	}),
 	createConversation({
-		id: resolvedConversationId,
+		id: PIPELINE_TYPING_CONVERSATION_ID,
+		visitor: lucasVisitor,
+		title: "SAML callback rejected on workspace invite",
+		priority: "normal",
+		status: ConversationStatus.OPEN,
+		startedAt: minutesAgo(52),
+		updatedAt: minutesAgo(11),
+		lastSeenAt: minutesAgo(11),
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM66666666666666666",
+			conversationId: PIPELINE_TYPING_CONVERSATION_ID,
+			text: "I found an outdated callback URL in your SSO settings. I can apply the fix after you confirm the new redirect URI.",
+			aiAgentId: fakeAIAgent.id,
+			createdAt: minutesAgo(11),
+		}),
+	}),
+	createConversation({
+		id: OTHER_CONVERSATION_ID_TWO,
+		visitor: sarahVisitor,
+		title: "Public docs access restored",
+		priority: "low",
+		status: ConversationStatus.OPEN,
+		startedAt: minutesAgo(35),
+		updatedAt: minutesAgo(15),
+		lastTimelineItem: createMessageTimelineItem({
+			id: "01JGTIM77777777777777777",
+			conversationId: OTHER_CONVERSATION_ID_TWO,
+			text: "Thanks, docs access is fixed. Could you also add rate-limit headers to the API examples?",
+			visitorId: sarahVisitor.id,
+			createdAt: minutesAgo(15),
+		}),
+	}),
+	createConversation({
+		id: RESOLVED_CONVERSATION_ID,
 		visitor: tonyVisitor,
 		title: "React integration docs",
 		priority: "low",
@@ -377,7 +500,7 @@ export const fakeConversations: ConversationHeader[] = [
 		resolvedByUserId: ANTHONY_RIERA_ID,
 		lastTimelineItem: createMessageTimelineItem({
 			id: "01JGTIM33333333333333333",
-			conversationId: resolvedConversationId,
+			conversationId: RESOLVED_CONVERSATION_ID,
 			text: "Got it working, thanks for the docs link!",
 			visitorId: tonyVisitor.id,
 			createdAt: daysAgo(2),
@@ -390,6 +513,8 @@ export const fakeVisitors: FakeVisitor[] = [
 	nicoVisitor,
 	dannyVisitor,
 	tonyVisitor,
+	sarahVisitor,
+	lucasVisitor,
 	marcVisitor,
 ];
 
@@ -402,8 +527,8 @@ export const createMarcConversation = (
 	return createConversation({
 		id: MARC_CONVERSATION_ID,
 		visitor: marcVisitor,
-		title: "Widget not loading on production",
-		priority: "high",
+		title: "Production widget blocked on custom domain",
+		priority: "urgent",
 		status: ConversationStatus.OPEN,
 		startedAt: createdAt,
 		updatedAt: createdAt,

@@ -10,12 +10,9 @@ import {
 	buildTimelineEventPreview,
 	extractEventPart,
 } from "@/lib/timeline-events";
+import { cn } from "@/lib/utils";
 import { getVisitorNameWithFallback } from "@/lib/visitors";
-import {
-	type FakeTypingActor,
-	fakeAIAgent,
-	MARC_CONVERSATION_ID,
-} from "../data";
+import { fakeAIAgent, MARC_CONVERSATION_ID } from "../data";
 import { buildFakeSmartOrderedList } from "./smart-grouping";
 
 const fakeAvailableHumanAgents = [
@@ -29,8 +26,6 @@ const fakeAvailableHumanAgents = [
 
 type FakeConversationListItemProps = {
 	conversation: ConversationHeader;
-	isTyping?: boolean;
-	isAITyping?: boolean;
 	itemRef?:
 		| React.RefCallback<HTMLDivElement>
 		| React.RefObject<HTMLDivElement | null>;
@@ -39,8 +34,6 @@ type FakeConversationListItemProps = {
 
 export function FakeConversationListItem({
 	conversation,
-	isTyping = false,
-	isAITyping = false,
 	itemRef,
 	focused = false,
 }: FakeConversationListItemProps) {
@@ -146,9 +139,8 @@ export function FakeConversationListItem({
 			<ConversationItemView
 				focused={focused}
 				hasUnreadMessage={hasUnreadMessage}
-				isAITyping={isAITyping}
 				isLastMessageFromAI={isLastMessageFromAI}
-				isTyping={isTyping}
+				isTyping={false}
 				lastTimelineContent={lastTimelineContent}
 				lastTimelineItemCreatedAt={lastTimelineItemCreatedAt}
 				visitorAvatarUrl={conversation.visitor?.contact?.image ?? null}
@@ -162,14 +154,12 @@ export function FakeConversationListItem({
 
 type FakeConversationListProps = {
 	conversations: ConversationHeader[];
-	typingActors?: FakeTypingActor[];
 	marcConversationRef?: React.RefObject<HTMLDivElement | null>;
 	analyticsSlot?: ReactNode;
 };
 
 export function FakeConversationList({
 	conversations,
-	typingActors = [],
 	marcConversationRef,
 	analyticsSlot,
 }: FakeConversationListProps) {
@@ -188,11 +178,15 @@ export function FakeConversationList({
 	return (
 		<PageContent className="h-full contain-strict">
 			<ScrollArea className="h-full">
-				{analyticsSlot ? <div className="pb-10">{analyticsSlot}</div> : null}
-				{groupedResult.items.map((item) => {
+				{analyticsSlot ? <div className="pb-8">{analyticsSlot}</div> : null}
+				{groupedResult.items.map((item, index) => {
 					if (item.type === "header") {
+						const isFirstHeader = index === 0;
 						return (
-							<div key={`header-${item.category}`}>
+							<div
+								className={cn(isFirstHeader ? "pt-3" : "pt-4")}
+								key={`header-${item.category}`}
+							>
 								<CategoryHeader
 									category={item.category}
 									count={item.count}
@@ -203,25 +197,21 @@ export function FakeConversationList({
 					}
 
 					const conversation = item.conversation;
-					const isTyping = typingActors.some(
-						(actor) => actor.conversationId === conversation.id
-					);
-					const isAITyping = typingActors.some(
-						(actor) =>
-							actor.conversationId === conversation.id &&
-							actor.actorType === "ai_agent"
-					);
 					const isMarcConversation = conversation.id === MARC_CONVERSATION_ID;
+					const isFirstAfterHeader =
+						index > 0 && groupedResult.items[index - 1]?.type === "header";
 
 					return (
-						<FakeConversationListItem
-							conversation={conversation}
-							focused={focusedConversationId === conversation.id}
-							isAITyping={isAITyping}
-							isTyping={isTyping}
-							itemRef={isMarcConversation ? marcConversationRef : undefined}
+						<div
+							className={cn(isFirstAfterHeader && "pt-2")}
 							key={conversation.id}
-						/>
+						>
+							<FakeConversationListItem
+								conversation={conversation}
+								focused={focusedConversationId === conversation.id}
+								itemRef={isMarcConversation ? marcConversationRef : undefined}
+							/>
+						</div>
 					);
 				})}
 			</ScrollArea>

@@ -116,7 +116,7 @@ export function ConversationItemView({
 						</span>
 					)}
 					{isTyping ? (
-						<div className="flex shrink-0 items-center gap-2">
+						<div className="flex min-w-0 shrink-0 items-center gap-2">
 							{isAITyping && <Logo className="size-3.5" />}
 							<BouncingDots />
 						</div>

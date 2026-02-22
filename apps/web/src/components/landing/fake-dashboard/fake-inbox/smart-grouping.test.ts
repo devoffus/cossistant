@@ -85,17 +85,63 @@ describe("buildFakeSmartOrderedList", () => {
 		]);
 		expect(conversationItems.map((item) => item.category)).toEqual([
 			"needsHuman",
+			"needsHuman",
 			"waiting8Hours",
+			"other",
+			"other",
 			"other",
 		]);
 		expect(result.categoryCounts).toEqual({
-			needsHuman: 1,
+			needsHuman: 2,
 			waiting8Hours: 1,
-			other: 1,
+			other: 3,
 		});
 		expect(
 			conversationItems.some((item) => item.conversation.status === "resolved")
 		).toBe(false);
+	});
+
+	it("moves an escalated conversation to other once escalation is handled", () => {
+		const escalatedConversation = createOpenConversation({
+			id: "handled-escalation",
+			escalatedAt: new Date().toISOString(),
+			lastTimelineItem: {
+				id: "handled-escalation-message",
+				conversationId: "handled-escalation",
+				organizationId: "org",
+				visibility: "public",
+				type: "message",
+				text: "AI needs human validation before shipping this fix.",
+				parts: [
+					{
+						type: "text",
+						text: "AI needs human validation before shipping this fix.",
+					},
+				],
+				userId: null,
+				visitorId: null,
+				aiAgentId: "ai-agent",
+				createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+				deletedAt: null,
+			},
+		});
+
+		const handledConversation = {
+			...escalatedConversation,
+			escalationHandledAt: new Date().toISOString(),
+		};
+
+		const result = buildFakeSmartOrderedList([handledConversation]);
+		const categories = result.items.reduce<string[]>((acc, item) => {
+			if (item.type === "conversation") {
+				acc.push(item.category);
+			}
+			return acc;
+		}, []);
+
+		expect(categories).toEqual(["other"]);
+		expect(result.categoryCounts.needsHuman).toBe(0);
+		expect(result.categoryCounts.other).toBe(1);
 	});
 
 	it("sorts needsHuman and waiting8Hours by priority then recency", () => {

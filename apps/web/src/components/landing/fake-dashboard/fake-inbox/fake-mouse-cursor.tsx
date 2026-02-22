@@ -1,25 +1,37 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type FakeMouseCursorProps = {
 	isVisible: boolean;
 	targetElementRef: React.RefObject<HTMLElement | null>;
+	containerRef?: React.RefObject<HTMLElement | null>;
 	onClick: () => void;
+	targetMode?: "conversation-row" | "element";
 	className?: string;
 };
 
 export function FakeMouseCursor({
 	isVisible,
 	targetElementRef,
+	containerRef,
 	onClick,
+	targetMode = "conversation-row",
 	className,
 }: FakeMouseCursorProps) {
 	const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
 	const [targetPosition, setTargetPosition] = useState({ x: 0, y: 0 });
-	const cursorRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (isVisible) {
+			return;
+		}
+
+		setStartPosition({ x: 0, y: 0 });
+		setTargetPosition({ x: 0, y: 0 });
+	}, [isVisible]);
 
 	useEffect(() => {
 		if (!isVisible) {
@@ -45,15 +57,16 @@ export function FakeMouseCursor({
 				return;
 			}
 
-			// The ref is attached to a wrapper div, but we want to target the actual
-			// clickable conversation item inside (Link or div with .group/conversation-item)
 			const actualTarget =
-				targetElementRef.current.querySelector(
-					".group\\/conversation-item, [class*='conversation-item']"
-				) || targetElementRef.current;
+				targetMode === "conversation-row"
+					? targetElementRef.current.querySelector(
+							".group\\/conversation-item, [class*='conversation-item']"
+						) || targetElementRef.current
+					: targetElementRef.current;
 
-			// Find the Page component (direct parent container with relative positioning)
-			const pageContainer = actualTarget.closest(".relative");
+			const pageContainer =
+				containerRef?.current ??
+				(actualTarget.closest(".relative") as HTMLElement | null);
 
 			if (!pageContainer) {
 				// Retry if container not found
@@ -63,11 +76,6 @@ export function FakeMouseCursor({
 				}
 				return;
 			}
-
-			// Find the ScrollArea viewport to get scroll offset
-			const scrollViewport = actualTarget.closest(
-				'[data-slot="scroll-area-viewport"]'
-			);
 
 			const containerRect = (
 				pageContainer as HTMLElement
@@ -92,8 +100,7 @@ export function FakeMouseCursor({
 				targetRect.width / 2 -
 				cursorSize / 2;
 			const targetY =
-				targetRect.top +
-				48 -
+				targetRect.top -
 				containerRect.top +
 				targetRect.height / 2 -
 				cursorSize / 2;
@@ -121,7 +128,7 @@ export function FakeMouseCursor({
 				clearTimeout(timeoutId);
 			}
 		};
-	}, [isVisible, targetElementRef]);
+	}, [isVisible, targetElementRef, targetMode, containerRef]);
 
 	// Don't render until positions are calculated (prevents flash of cursor in wrong position)
 	if (!isVisible) {
@@ -149,7 +156,6 @@ export function FakeMouseCursor({
 				// Trigger click after animation completes
 				onClick();
 			}}
-			ref={cursorRef}
 			style={{
 				left: startPosition.x,
 				top: startPosition.y,

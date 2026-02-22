@@ -19,12 +19,13 @@ export function FakeDashboard({ className }: { className?: string }) {
 	const onAnimationComplete = useLandingAnimationStore(
 		(state) => state.onAnimationComplete
 	);
-	const play = useLandingAnimationStore((state) => state.play);
 	const pause = useLandingAnimationStore((state) => state.pause);
 	const reset = useLandingAnimationStore((state) => state.reset);
 	const selectView = useLandingAnimationStore((state) => state.selectView);
 	const previousViewRef = useRef<typeof currentView>(currentView);
-	const [showMouseCursor, setShowMouseCursor] = useState(false);
+	const wasVisibilityPausedRef = useRef(false);
+	const [showInboxMouseCursor, setShowInboxMouseCursor] = useState(false);
+	const [showJoinMouseCursor, setShowJoinMouseCursor] = useState(false);
 	const [dashboardRef, isVisible] = useViewportVisibility<HTMLDivElement>({
 		threshold: 0.1,
 		rootMargin: "50px",
@@ -32,46 +33,66 @@ export function FakeDashboard({ className }: { className?: string }) {
 
 	useEffect(() => {
 		if (!isVisible && isPlaying) {
+			wasVisibilityPausedRef.current = true;
 			pause();
-		} else if (isVisible && !isPlaying && currentView !== null) {
-			play();
+			return;
 		}
-	}, [isVisible, isPlaying, pause, play, currentView]);
+
+		if (
+			isVisible &&
+			wasVisibilityPausedRef.current &&
+			!isPlaying &&
+			currentView !== null
+		) {
+			wasVisibilityPausedRef.current = false;
+			selectView(currentView);
+		}
+	}, [isVisible, isPlaying, pause, currentView, selectView]);
 
 	useEffect(() => {
 		reset();
 		const timeout = setTimeout(() => {
-			play();
-		}, 500);
+			selectView("inbox");
+		}, 200);
 		return () => clearTimeout(timeout);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	const handleMouseClick = useCallback(() => {
-		setShowMouseCursor(false);
+	const handleInboxMouseClick = useCallback(() => {
+		setShowInboxMouseCursor(false);
 		setTimeout(() => {
 			selectView("conversation");
 		}, 100);
 	}, [selectView]);
 
-	const handleShowMouseCursor = useCallback(() => {
-		setShowMouseCursor(true);
+	const handleShowInboxMouseCursor = useCallback(() => {
+		setShowInboxMouseCursor(true);
+	}, []);
+
+	const handleShowJoinMouseCursor = useCallback(() => {
+		setShowJoinMouseCursor(true);
 	}, []);
 
 	const inboxHook = useFakeInbox({
 		isPlaying: isPlaying && currentView === "inbox",
 		onComplete: undefined,
 		onShowMouseCursor:
-			currentView === "inbox" ? handleShowMouseCursor : undefined,
+			currentView === "inbox" ? handleShowInboxMouseCursor : undefined,
 	});
 
 	const conversationHook = useFakeConversation({
 		isPlaying: isPlaying && currentView === "conversation",
 		onComplete:
 			currentView === "conversation" ? onAnimationComplete : undefined,
-		onConversationResolved: inboxHook.markConversationResolved,
-		initialMessages: inboxHook.inboxMessages,
+		onConversationHandled: inboxHook.markConversationHandledByHuman,
+		onShowJoinCursor:
+			currentView === "conversation" ? handleShowJoinMouseCursor : undefined,
 	});
+
+	const handleJoinMouseClick = useCallback(() => {
+		setShowJoinMouseCursor(false);
+		conversationHook.joinEscalation();
+	}, [conversationHook.joinEscalation]);
 
 	useEffect(() => {
 		if (!isRestarting) {
@@ -80,7 +101,8 @@ export function FakeDashboard({ className }: { className?: string }) {
 
 		inboxHook.resetDemoData();
 		conversationHook.resetDemoData();
-		setShowMouseCursor(false);
+		setShowInboxMouseCursor(false);
+		setShowJoinMouseCursor(false);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isRestarting]);
 
@@ -89,7 +111,8 @@ export function FakeDashboard({ className }: { className?: string }) {
 			previousViewRef.current !== null &&
 			previousViewRef.current !== currentView
 		) {
-			setShowMouseCursor(false);
+			setShowInboxMouseCursor(false);
+			setShowJoinMouseCursor(false);
 		}
 
 		previousViewRef.current = currentView;
@@ -108,13 +131,16 @@ export function FakeDashboard({ className }: { className?: string }) {
 				{currentView === "inbox" ? (
 					<FakeInbox
 						conversations={inboxHook.conversations}
-						onMouseClick={handleMouseClick}
-						showMouseCursor={showMouseCursor}
-						typingActors={inboxHook.typingActors}
+						onMouseClick={handleInboxMouseClick}
+						showMouseCursor={showInboxMouseCursor}
 					/>
 				) : (
 					<FakeConversation
 						conversation={conversationHook.conversation}
+						isEscalationPending={conversationHook.isEscalationPending}
+						onJoinConversation={conversationHook.joinEscalation}
+						onJoinCursorClick={handleJoinMouseClick}
+						showJoinCursor={showJoinMouseCursor}
 						timeline={conversationHook.timelineItems}
 						typingActors={conversationHook.typingActors}
 						visitor={conversationHook.visitor}

@@ -9,6 +9,7 @@ export type EscalationActionProps = {
 	reason: string;
 	onJoin: () => void;
 	isJoining?: boolean;
+	joinButtonRef?: React.RefObject<HTMLButtonElement | null>;
 	/**
 	 * Called when the container height changes (for dynamic timeline padding).
 	 */
@@ -19,6 +20,7 @@ export const EscalationAction: React.FC<EscalationActionProps> = ({
 	reason,
 	onJoin,
 	isJoining = false,
+	joinButtonRef,
 	onHeightChange,
 }) => {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,7 @@ export const EscalationAction: React.FC<EscalationActionProps> = ({
 						className="bg-cossistant-orange text-white hover:bg-cossistant-orange/90"
 						disabled={isJoining}
 						onClick={onJoin}
+						ref={joinButtonRef}
 						size="sm"
 					>
 						{isJoining ? <>Joining...</> : <>Join the conversation</>}

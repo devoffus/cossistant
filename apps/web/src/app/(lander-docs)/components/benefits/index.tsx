@@ -84,7 +84,7 @@ export const Benefits = () => (
 	<section className="mt-40 mb-0 grid gap-6 md:gap-12 lg:my-60">
 		<div className="flex flex-col gap-2 px-4">
 			<p className="font-mono text-primary/70 text-xs">
-				[What we're building next]
+				[Support your customers faster with your own AI agent]
 			</p>
 			<h2 className="w-full max-w-2xl text-pretty font-f37-stout text-4xl sm:text-3xl md:text-balance md:text-4xl">
 				{HEADLINE}

@@ -10,25 +10,23 @@ import {
 	type InboxAnalyticsRangeDays,
 } from "@/components/inbox-analytics";
 import { Page, PageHeader, PageHeaderTitle } from "@/components/ui/layout";
-import type { FakeTypingActor } from "../data";
 import { FakeInboxNavigationSidebar } from "../fake-sidebar/inbox";
 import { FakeConversationList } from "./fake-conversation-list";
 import { FakeMouseCursor } from "./fake-mouse-cursor";
 
 type Props = {
 	conversations: ConversationHeader[];
-	typingActors?: FakeTypingActor[];
 	showMouseCursor?: boolean;
 	onMouseClick?: () => void;
 };
 
 export function FakeInbox({
 	conversations,
-	typingActors = [],
 	showMouseCursor = false,
 	onMouseClick,
 }: Props) {
 	const marcConversationRef = useRef<HTMLDivElement>(null);
+	const cursorContainerRef = useRef<HTMLDivElement>(null);
 	const [rangeDays, setRangeDays] = useState<InboxAnalyticsRangeDays>(7);
 
 	const statusCounts = useMemo(
@@ -92,33 +90,35 @@ export function FakeInbox({
 				open
 				statusCounts={statusCounts}
 			/>
-			<Page className="relative px-0">
-				<PageHeader className="px-4">
-					<div className="flex items-center gap-2">
-						<PageHeaderTitle className="capitalize">Inbox</PageHeaderTitle>
-					</div>
-				</PageHeader>
+			<div className="relative flex h-full flex-1" ref={cursorContainerRef}>
+				<Page className="relative px-0">
+					<PageHeader className="px-4">
+						<div className="flex items-center gap-2">
+							<PageHeaderTitle className="capitalize">Inbox</PageHeaderTitle>
+						</div>
+					</PageHeader>
 
-				<FakeConversationList
-					analyticsSlot={
-						<InboxAnalyticsDisplay
-							data={analyticsData}
-							onRangeChange={setRangeDays}
-							rangeDays={rangeDays}
-						/>
-					}
-					conversations={conversations}
-					marcConversationRef={marcConversationRef}
-					typingActors={typingActors}
-				/>
+					<FakeConversationList
+						analyticsSlot={
+							<InboxAnalyticsDisplay
+								data={analyticsData}
+								onRangeChange={setRangeDays}
+								rangeDays={rangeDays}
+							/>
+						}
+						conversations={conversations}
+						marcConversationRef={marcConversationRef}
+					/>
+				</Page>
 				{showMouseCursor && onMouseClick && (
 					<FakeMouseCursor
+						containerRef={cursorContainerRef}
 						isVisible={showMouseCursor}
 						onClick={onMouseClick}
 						targetElementRef={marcConversationRef}
 					/>
 				)}
-			</Page>
+			</div>
 		</>
 	);
 }
