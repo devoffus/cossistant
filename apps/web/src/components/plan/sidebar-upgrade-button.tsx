@@ -36,9 +36,9 @@ function HardLimitRow({
 	return (
 		<div className="space-y-1.5">
 			<div className="flex items-center justify-between text-xs">
-				<span className="font-medium text-primary/80">{label}</span>
+				<span className="font-medium text-primary/90">{label}</span>
 				<span
-					className={cn("text-primary/50", reached && "text-cossistant-orange")}
+					className={cn("text-primary/70", reached && "text-cossistant-orange")}
 				>
 					{limit === null
 						? `${used.toLocaleString()} / Unlimited`
@@ -49,8 +49,8 @@ function HardLimitRow({
 				<div className="h-1.5 w-full overflow-hidden rounded-full bg-background-200 dark:bg-background-800">
 					<div
 						className={cn(
-							"h-full rounded-r-full transition-all",
-							reached ? "bg-cossistant-orange" : "bg-cossistant-blue"
+							"h-full min-w-1 rounded-r-full transition-all",
+							reached ? "bg-cossistant-orange" : "bg-primary/50"
 						)}
 						style={{ width: `${barWidth}%` }}
 					/>
@@ -94,11 +94,11 @@ export function SidebarUpgradeButton({
 	return (
 		<>
 			<button
-				className="relative flex h-auto w-full flex-col gap-3 overflow-hidden rounded-[2px] border border-cossistant-orange/60 border-dashed bg-background-100 p-4 text-left hover:bg-background-200 dark:border-cossistant-orange/20"
+				className="relative flex h-auto w-full flex-col gap-3 overflow-hidden rounded-[2px] border border-cossistant-orange/60 border-dashed bg-cossistant-orange/[0.02] p-4 text-left hover:bg-cossistant-orange/5 dark:border-cossistant-orange/20"
 				onClick={() => setIsModalOpen(true)}
 				type="button"
 			>
-				<div className="font-medium text-base text-cossistant-orange">
+				<div className="font-medium text-cossistant-orange text-sm">
 					Upgrade to Pro
 				</div>
 
@@ -126,7 +126,7 @@ export function SidebarUpgradeButton({
 					/>
 				</div>
 
-				<div className="text-[11px] text-primary/40">
+				<div className="text-[11px] text-primary/60">
 					Rolling {hardLimitStatus.rollingWindowDays}-day window
 				</div>
 			</button>
