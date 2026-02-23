@@ -127,7 +127,7 @@ export const ConversationEvent: React.FC<ConversationEventProps> = ({
 		return (
 			<div
 				className={cn(
-					"co-animate-fade-in-scale flex items-center gap-2 text-co-muted-foreground text-sm",
+					"co-animate-fade-in-scale flex items-center gap-2 pt-0.5 text-co-muted-foreground text-sm",
 					className
 				)}
 			>

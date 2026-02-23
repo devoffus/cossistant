@@ -34,8 +34,9 @@ export function AnimationControls() {
 		<div className="hidden w-max gap-2 lg:flex">
 			<Button
 				className={cn(
-					"border-primary/10 border-dashed bg-background-200 dark:bg-background-400",
-					currentView === "inbox" && "ring-2 ring-primary/20"
+					"rounded border-primary/10 border-dashed bg-background-200 dark:bg-background",
+					currentView === "inbox" &&
+						"ring-1 ring-primary/10 ring-offset-2 ring-offset-background"
 				)}
 				onClick={handleInboxClick}
 				size="sm"
@@ -46,21 +47,23 @@ export function AnimationControls() {
 			</Button>
 			<Button
 				className={cn(
-					currentView === "conversation" && "ring-2 ring-primary/20"
+					"rounded border-primary/10 border-dashed bg-background-200 dark:bg-background",
+					currentView === "conversation" &&
+						"ring-1 ring-primary/10 ring-offset-2 ring-offset-background"
 				)}
 				onClick={handleConversationClick}
 				size="sm"
 				type="button"
-				variant="secondary"
+				variant="ghost"
 			>
 				Real-time conversation
 			</Button>
 			<Button
-				className="size-8"
+				className="size-8 rounded dark:bg-background"
 				onClick={handlePlayPauseClick}
 				size="icon"
 				type="button"
-				variant="secondary"
+				variant="outline"
 			>
 				<Icon
 					className="size-4"
