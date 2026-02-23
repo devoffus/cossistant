@@ -31,7 +31,7 @@ import {
 	renderToolActionIcon,
 } from "@/components/conversation/messages/activity/action-icon-map";
 import { shouldDisplayToolTimelineItem } from "@/lib/tool-timeline-visibility";
-import type { FakeTypingVisitor } from "../fake-dashboard/data";
+import type { FakeSupportTypingActor } from "./types";
 
 function extractEventPart(item: TimelineItem): TimelinePartEvent | null {
 	if (item.type !== "event") {
@@ -310,7 +310,7 @@ type FakeConversationTimelineListProps = {
 	availableAIAgents: AvailableAIAgent[];
 	availableHumanAgents: AvailableHumanAgent[];
 	currentVisitorId?: string;
-	typingVisitors: FakeTypingVisitor[];
+	typingActors: FakeSupportTypingActor[];
 };
 
 export function FakeConversationTimelineList({
@@ -320,7 +320,7 @@ export function FakeConversationTimelineList({
 	availableAIAgents = [],
 	availableHumanAgents = [],
 	currentVisitorId,
-	typingVisitors,
+	typingActors,
 }: FakeConversationTimelineListProps) {
 	const messageListRef = useRef<HTMLDivElement | null>(null);
 
@@ -332,13 +332,13 @@ export function FakeConversationTimelineList({
 
 	const typingIndicatorParticipants = useMemo<TypingParticipant[]>(
 		() =>
-			typingVisitors
-				.filter((tv) => tv.visitorId !== currentVisitorId)
-				.map((tv) => ({
-					id: tv.visitorId,
-					type: "team_member" as const,
+			typingActors
+				.filter((typingActor) => typingActor.actorId !== currentVisitorId)
+				.map((typingActor) => ({
+					id: typingActor.actorId,
+					type: typingActor.actorType === "ai" ? "ai" : "team_member",
 				})),
-		[typingVisitors, currentVisitorId]
+		[typingActors, currentVisitorId]
 	);
 
 	useEffect(() => {

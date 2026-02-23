@@ -30,7 +30,8 @@ export default async function Landing() {
 							[Programmatic Human + AI agent support your users love]
 						</p>
 						<h1 className="max-w-4xl text-balance text-left font-f37-stout text-[42px] leading-tight md:text-3xl xl:text-5xl">
-							Make your customer support move faster under 10 lines of code.
+							Make your SaaS customer support move faster under 10 lines of
+							code.
 						</h1>
 						<div className="mt-6 flex w-full flex-col gap-3 md:max-w-[75%] lg:max-w-full lg:flex-row lg:items-center">
 							<Button

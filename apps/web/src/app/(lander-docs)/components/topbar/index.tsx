@@ -219,8 +219,7 @@ export function TopBar({
 					</div>
 				</div>
 				<div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-20 bg-linear-to-b from-background to-transparent" />
-				<div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-28 bg-linear-to-b from-background to-transparent" />
-				<div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-40 bg-linear-to-b from-background to-transparent" />
+				<div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-24 bg-linear-to-b from-background to-transparent" />
 				<div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-32 bg-linear-to-b from-background to-transparent" />
 			</div>
 		</div>

@@ -9,6 +9,7 @@ import type { PublicWebsiteResponse } from "@cossistant/types";
 import React from "react";
 
 const ANTHONY_RIERA_ID = "01JGUSER1111111111111111";
+const THUMBNAIL_AI_ID = "01JGAIA11111111111111111";
 const MARC_VISITOR_ID = "01JGVIS22222222222222222";
 
 // Fake website data
@@ -40,7 +41,13 @@ const fakeWebsite: PublicWebsiteResponse = {
 			lastSeenAt: new Date().toISOString(),
 		},
 	],
-	availableAIAgents: [],
+	availableAIAgents: [
+		{
+			id: THUMBNAIL_AI_ID,
+			name: "AI",
+			image: null,
+		},
+	],
 };
 
 // Fake client (minimal implementation)

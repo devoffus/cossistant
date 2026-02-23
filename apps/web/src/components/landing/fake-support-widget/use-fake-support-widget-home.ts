@@ -38,13 +38,6 @@ export function useFakeSupportWidgetHome({
 		scheduleRef.current = schedule;
 	}, [schedule]);
 
-	// Reset hasScheduledRef when transitioning from paused to playing
-	useEffect(() => {
-		if (isPlaying) {
-			hasScheduledRef.current = false;
-		}
-	}, [isPlaying]);
-
 	const resetDemoData = useCallback(() => {
 		resetScheduler();
 		hasScheduledRef.current = false;
@@ -68,8 +61,8 @@ export function useFakeSupportWidgetHome({
 			// Mark as scheduled immediately to prevent duplicate scheduling
 			hasScheduledRef.current = true;
 
-			// Show mouse cursor after 1.5 seconds
-			currentSchedule(1500, () => {
+			// Show mouse cursor shortly after entering the home view.
+			currentSchedule(450, () => {
 				if (onShowMouseCursorRef.current) {
 					onShowMouseCursorRef.current();
 				}

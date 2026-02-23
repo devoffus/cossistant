@@ -51,10 +51,9 @@ export function FakeWidgetMouseCursor({
 
 			const targetButton = targetElementRef.current;
 
-			// Find the widget container (the one with h-[550px] w-[360px])
-			// It should be a parent with relative positioning
+			// Find the stable fake widget container wrapper.
 			const widgetContainer = targetButton.closest(
-				".relative.flex.h-\\[550px\\].w-\\[360px\\]"
+				"[data-fake-widget-container='true']"
 			) as HTMLElement | null;
 
 			if (!widgetContainer) {
@@ -145,11 +144,11 @@ export function FakeWidgetMouseCursor({
 				willChange: "transform",
 			}}
 			transition={{
-				duration: 1.5,
+				duration: 0.9,
 				ease: [0.25, 0.1, 0.25, 1],
 				scale: {
 					times: [0, 0.85, 1],
-					duration: 1.5,
+					duration: 0.9,
 				},
 			}}
 		>

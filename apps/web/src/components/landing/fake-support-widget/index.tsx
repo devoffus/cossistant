@@ -23,6 +23,7 @@ import {
 } from "./fake-support-store";
 import { FakeSupportTextProvider, useSupportText } from "./fake-support-text";
 import { FakeWidgetMouseCursor } from "./fake-widget-mouse-cursor";
+import type { FakeSupportTypingActor } from "./types";
 import { useFakeSupportWidgetConversation } from "./use-fake-support-widget-conversation";
 import { useFakeSupportWidgetHome } from "./use-fake-support-widget-home";
 
@@ -62,12 +63,12 @@ function FakeHeader({
 function FakeConversationView({
 	conversationId,
 	timelineItems,
-	typingVisitors,
+	typingActors,
 	isConversationClosed,
 }: {
 	conversationId: string;
 	timelineItems: TimelineItem[];
-	typingVisitors: import("../fake-dashboard/data").FakeTypingVisitor[];
+	typingActors: FakeSupportTypingActor[];
 	isConversationClosed: boolean;
 }) {
 	const { website, availableAIAgents, availableHumanAgents, visitor } =
@@ -108,7 +109,7 @@ function FakeConversationView({
 					conversationId={conversationId}
 					currentVisitorId={visitor?.id}
 					items={timelineItems}
-					typingVisitors={typingVisitors}
+					typingActors={typingActors}
 				/>
 			</div>
 
@@ -172,30 +173,73 @@ export function FakeSupportWidget({ className }: { className?: string }) {
 	const reset = useWidgetAnimationStore((state) => state.reset);
 	const selectView = useWidgetAnimationStore((state) => state.selectView);
 	const previousViewRef = useRef<typeof currentView>(currentView);
+	const hasStartedRef = useRef(false);
+	const wasVisibilityPausedRef = useRef(false);
+	const visibilityStartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	const [widgetRef, isVisible] = useViewportVisibility<HTMLDivElement>({
 		threshold: 0.1,
 		rootMargin: "50px",
 	});
 
-	// Pause animation when not visible
+	// Reset to a paused baseline so the animation starts only after entering view.
 	useEffect(() => {
-		if (!isVisible && isPlaying) {
-			pause();
-		} else if (isVisible && !isPlaying && currentView !== null) {
+		reset();
+		pause();
+		hasStartedRef.current = false;
+		wasVisibilityPausedRef.current = false;
+		if (visibilityStartTimeoutRef.current) {
+			clearTimeout(visibilityStartTimeoutRef.current);
+			visibilityStartTimeoutRef.current = null;
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	// Start when visible, pause when hidden, and resume only after visibility pauses.
+	useEffect(() => {
+		if (!isVisible) {
+			if (visibilityStartTimeoutRef.current) {
+				clearTimeout(visibilityStartTimeoutRef.current);
+				visibilityStartTimeoutRef.current = null;
+			}
+			if (isPlaying) {
+				wasVisibilityPausedRef.current = true;
+				pause();
+			}
+			return;
+		}
+
+		if (!hasStartedRef.current && currentView !== null) {
+			if (visibilityStartTimeoutRef.current) {
+				clearTimeout(visibilityStartTimeoutRef.current);
+			}
+			visibilityStartTimeoutRef.current = setTimeout(() => {
+				hasStartedRef.current = true;
+				play();
+				visibilityStartTimeoutRef.current = null;
+			}, 150);
+			return;
+		}
+
+		if (
+			hasStartedRef.current &&
+			wasVisibilityPausedRef.current &&
+			!isPlaying &&
+			currentView !== null
+		) {
+			wasVisibilityPausedRef.current = false;
 			play();
 		}
 	}, [isVisible, isPlaying, pause, play, currentView]);
 
-	// Reset and start animation after a short delay to ensure everything is ready
-	useEffect(() => {
-		reset();
-		const timeout = setTimeout(() => {
-			play();
-		}, 500);
-		return () => clearTimeout(timeout);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
+	useEffect(
+		() => () => {
+			if (visibilityStartTimeoutRef.current) {
+				clearTimeout(visibilityStartTimeoutRef.current);
+			}
+		},
+		[]
+	);
 
 	const [showMouseCursor, setShowMouseCursor] = useState(false);
 	const buttonRef = useRef<HTMLButtonElement>(null);
@@ -302,7 +346,10 @@ export function FakeSupportWidget({ className }: { className?: string }) {
 						onNavigate={handleNavigate}
 					>
 						<div className="relative flex flex-col items-end gap-4 py-10">
-							<div className="relative flex h-[550px] w-[360px] flex-col overflow-hidden rounded border border-co-border bg-co-background shadow-2xl dark:shadow-primary/10">
+							<div
+								className="relative flex h-[620px] min-h-[620px] w-[420px] flex-col overflow-hidden rounded border border-co-border bg-co-background shadow-2xl dark:shadow-primary/10"
+								data-fake-widget-container="true"
+							>
 								{currentView === "home" ? (
 									<div className="relative flex h-full w-full flex-col">
 										<FakeHomePage
@@ -325,12 +372,12 @@ export function FakeSupportWidget({ className }: { className?: string }) {
 										timelineItems={
 											conversationHook.timelineItems as TimelineItem[]
 										}
-										typingVisitors={conversationHook.typingVisitors}
+										typingActors={conversationHook.typingActors}
 									/>
 								)}
 							</div>
 							<FakeBubble
-								className="opacity-50"
+								className="opacity-20"
 								isOpen={true}
 								isTyping={false}
 							/>

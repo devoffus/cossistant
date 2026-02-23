@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LogoText } from "@/components/ui/logo";
+import { Logo } from "@/components/ui/logo";
 import { ThreeLogo } from "@/components/ui/three-logo";
 import { DISCORD_INVITE, X_URL } from "@/constants";
 import { GitHubLink } from "./github-link";
@@ -14,7 +14,7 @@ export function Footer() {
 					{/* Brand */}
 					<div className="col-span-1 md:col-span-2">
 						<div className="mb-4 flex items-center space-x-2">
-							<LogoText />
+							<Logo />
 						</div>
 						<p className="mb-6 max-w-md font-mono text-foreground/60 text-sm">
 							the open-source, ai-native support infrastructure for modern saas.

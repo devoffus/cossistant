@@ -26,7 +26,8 @@ export function BrowserWithBackground({
 				largeSrc="https://cdn.cossistant.com/landing/main-large.jpg"
 				mediumSrc="https://cdn.cossistant.com/landing/main-medium.jpg"
 				portraitOnMobile
-				resolution={0.01}
+				resolution={0.05}
+				shimmerTintStrength={1}
 				showImage={false}
 				smallSrc="https://cdn.cossistant.com/landing/main-small.jpg"
 			/>

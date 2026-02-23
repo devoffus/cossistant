@@ -163,7 +163,7 @@ export function BackgroundImage({
 	asciiMotion = true,
 	asciiMotionIntensity = 0.1,
 	asciiMotionSpeed = 1,
-	shimmerTintStrength = 0.2,
+	shimmerTintStrength = 1,
 	shimmerTintColorVar = "--cossistant-orange",
 }: BackgroundImageProps) {
 	const [isMobileViewport, setIsMobileViewport] = useState(false);
