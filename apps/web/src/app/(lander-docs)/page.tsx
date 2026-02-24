@@ -8,6 +8,7 @@ import { TooltipOnHover } from "@/components/ui/tooltip";
 import { AnimationControls } from "./components/animation-controls";
 import { Benefits } from "./components/benefits";
 import { BrowserWithBackground } from "./components/browser-with-background";
+import CossistantIs from "./components/cossistant-is";
 import { Install } from "./components/install";
 
 export const dynamic = "force-dynamic";
@@ -84,6 +85,7 @@ export default async function Landing() {
 					</div>
 				</div>
 			</div>
+			<CossistantIs />
 			<Install />
 			{/* <Benefits /> */}
 		</>
