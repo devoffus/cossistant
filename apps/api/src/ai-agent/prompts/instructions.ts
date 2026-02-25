@@ -22,12 +22,6 @@ export function buildBehaviorInstructions(
 		instructions.push(escalationInstructions);
 	}
 
-	// Build capability list
-	const capabilities = buildCapabilitiesInstructions(settings);
-	if (capabilities) {
-		instructions.push(capabilities);
-	}
-
 	// Add mode-specific behavior
 	const modeInstructions = buildModeBehaviorInstructions(mode);
 	if (modeInstructions) {

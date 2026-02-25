@@ -9,9 +9,17 @@ import {
 
 describe("prompt document rules", () => {
 	it("accepts reserved core document names", () => {
+		expect(isCorePromptDocumentName("behaviour.md")).toBe(true);
+		expect(isCorePromptDocumentName("participation.md")).toBe(true);
+		expect(isCorePromptDocumentName("grounding.md")).toBe(true);
 		expect(isCorePromptDocumentName("capabilities.md")).toBe(true);
 		expect(isCorePromptDocumentName("decision.md")).toBe(true);
 		expect(isCorePromptDocumentName("visitor-contact.md")).toBe(true);
+		expect(() => assertCorePromptDocumentName("behaviour.md")).not.toThrow();
+		expect(() =>
+			assertCorePromptDocumentName("participation.md")
+		).not.toThrow();
+		expect(() => assertCorePromptDocumentName("grounding.md")).not.toThrow();
 		expect(() => assertCorePromptDocumentName("capabilities.md")).not.toThrow();
 		expect(() => assertCorePromptDocumentName("decision.md")).not.toThrow();
 		expect(() =>

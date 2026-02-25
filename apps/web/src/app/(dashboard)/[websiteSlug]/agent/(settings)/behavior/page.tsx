@@ -1,6 +1,6 @@
 "use client";
 
-import type { GetBehaviorStudioResponse } from "@cossistant/types";
+import type { GetPromptStudioResponse } from "@cossistant/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useWebsite } from "@/contexts/website";
 import { useTRPC } from "@/lib/trpc/client";
 
-type BehaviorEntry = GetBehaviorStudioResponse["behaviors"][number];
+type CorePromptEntry = GetPromptStudioResponse["corePrompts"][number];
 
 export default function BehaviorPage() {
 	const website = useWebsite();
@@ -39,7 +39,7 @@ export default function BehaviorPage() {
 		isLoading: isLoadingStudio,
 		isError: isStudioError,
 	} = useQuery({
-		...trpc.aiAgent.getBehaviorStudio.queryOptions({
+		...trpc.aiAgent.getPromptStudio.queryOptions({
 			websiteSlug: website.slug,
 			aiAgentId: aiAgent?.id ?? "",
 		}),
@@ -59,7 +59,10 @@ export default function BehaviorPage() {
 
 		setDrafts(
 			Object.fromEntries(
-				studio.behaviors.map((behavior) => [behavior.id, behavior.content])
+				studio.corePrompts.map((prompt) => [
+					prompt.documentName,
+					prompt.content,
+				])
 			)
 		);
 	}, [studio]);
@@ -70,15 +73,15 @@ export default function BehaviorPage() {
 		}
 
 		await queryClient.invalidateQueries({
-			queryKey: trpc.aiAgent.getBehaviorStudio.queryKey({
+			queryKey: trpc.aiAgent.getPromptStudio.queryKey({
 				websiteSlug: website.slug,
 				aiAgentId: aiAgent.id,
 			}),
 		});
 	};
 
-	const upsertBehaviorPromptMutation = useMutation(
-		trpc.aiAgent.upsertBehaviorPrompt.mutationOptions({
+	const upsertCorePromptMutation = useMutation(
+		trpc.aiAgent.upsertCorePrompt.mutationOptions({
 			onSuccess: () => {
 				toast.success("Behaviour saved");
 				void invalidateBehaviorStudio();
@@ -89,8 +92,8 @@ export default function BehaviorPage() {
 		})
 	);
 
-	const resetBehaviorPromptMutation = useMutation(
-		trpc.aiAgent.resetBehaviorPrompt.mutationOptions({
+	const resetCorePromptMutation = useMutation(
+		trpc.aiAgent.resetCorePrompt.mutationOptions({
 			onSuccess: () => {
 				toast.success("Behaviour reset to default");
 				void invalidateBehaviorStudio();
@@ -102,61 +105,63 @@ export default function BehaviorPage() {
 	);
 
 	const isMutating =
-		upsertBehaviorPromptMutation.isPending ||
-		resetBehaviorPromptMutation.isPending;
+		upsertCorePromptMutation.isPending || resetCorePromptMutation.isPending;
 
-	const behaviors = useMemo(() => studio?.behaviors ?? [], [studio?.behaviors]);
+	const corePrompts = useMemo(
+		() => studio?.corePrompts ?? [],
+		[studio?.corePrompts]
+	);
 
-	const getDraft = (behavior: BehaviorEntry) =>
-		drafts[behavior.id] ?? behavior.content;
+	const getDraft = (prompt: CorePromptEntry) =>
+		drafts[prompt.documentName] ?? prompt.content;
 
 	const handleApplyPreset = (
-		behavior: BehaviorEntry,
+		prompt: CorePromptEntry,
 		presetContent: string
 	): void => {
 		setDrafts((current) => ({
 			...current,
-			[behavior.id]: presetContent,
+			[prompt.documentName]: presetContent,
 		}));
 	};
 
-	const handleSave = async (behavior: BehaviorEntry) => {
+	const handleSave = async (prompt: CorePromptEntry) => {
 		if (!aiAgent) {
 			return;
 		}
 
-		const draft = getDraft(behavior).trim();
+		const draft = getDraft(prompt).trim();
 		if (!draft) {
 			toast.error("Behaviour content cannot be empty");
 			return;
 		}
 
-		await upsertBehaviorPromptMutation.mutateAsync({
+		await upsertCorePromptMutation.mutateAsync({
 			websiteSlug: website.slug,
 			aiAgentId: aiAgent.id,
-			behaviorId: behavior.id,
+			documentName: prompt.documentName,
 			content: draft,
 		});
 	};
 
-	const handleReset = async (behavior: BehaviorEntry) => {
+	const handleReset = async (prompt: CorePromptEntry) => {
 		if (!aiAgent) {
 			return;
 		}
 
 		setDrafts((current) => ({
 			...current,
-			[behavior.id]: behavior.defaultContent,
+			[prompt.documentName]: prompt.defaultContent,
 		}));
 
-		if (!behavior.hasOverride) {
+		if (!prompt.hasOverride) {
 			return;
 		}
 
-		await resetBehaviorPromptMutation.mutateAsync({
+		await resetCorePromptMutation.mutateAsync({
 			websiteSlug: website.slug,
 			aiAgentId: aiAgent.id,
-			behaviorId: behavior.id,
+			documentName: prompt.documentName,
 		});
 	};
 
@@ -170,7 +175,7 @@ export default function BehaviorPage() {
 				<SettingsHeader>Behaviour</SettingsHeader>
 				<PageContent className="py-30">
 					<div className="space-y-8">
-						{Array.from({ length: 2 }).map((_, index) => (
+						{Array.from({ length: 6 }).map((_, index) => (
 							<SettingsRow
 								description="Loading behaviour..."
 								key={index}
@@ -213,17 +218,15 @@ export default function BehaviorPage() {
 		<SettingsPage>
 			<SettingsHeader>Behaviour</SettingsHeader>
 			<PageContent className="py-30">
-				{behaviors.map((behavior) => {
-					const draft = getDraft(behavior);
-					const isDirty = draft !== behavior.content;
-					const isAtDefaultDraft =
-						draft.trim() === behavior.defaultContent.trim();
+				{corePrompts.map((prompt) => {
+					const draft = getDraft(prompt);
+					const isDirty = draft !== prompt.content;
 
 					return (
 						<SettingsRow
-							description={behavior.description}
-							key={behavior.id}
-							title={behavior.label}
+							description={prompt.description}
+							key={prompt.documentName}
+							title={prompt.label}
 						>
 							<PromptInput
 								className="border-none py-6"
@@ -232,7 +235,7 @@ export default function BehaviorPage() {
 								onChange={(value) =>
 									setDrafts((current) => ({
 										...current,
-										[behavior.id]: value,
+										[prompt.documentName]: value,
 									}))
 								}
 								rows={12}
@@ -241,11 +244,11 @@ export default function BehaviorPage() {
 
 							<SettingsRowFooter className="flex items-center justify-between gap-2">
 								<div>
-									{isAtDefaultDraft ? (
+									{prompt.presets.length > 0 ? (
 										<div className="flex items-center gap-2">
 											<p className="text-muted-foreground text-xs">Presets:</p>
 											<div className="flex flex-wrap gap-1">
-												{behavior.presets.map((preset) => {
+												{prompt.presets.map((preset) => {
 													const isActivePreset =
 														draft.trim() === preset.content.trim();
 
@@ -259,7 +262,7 @@ export default function BehaviorPage() {
 															disabled={isMutating}
 															key={preset.id}
 															onClick={() =>
-																handleApplyPreset(behavior, preset.content)
+																handleApplyPreset(prompt, preset.content)
 															}
 															size="sm"
 															title={preset.description}
@@ -277,7 +280,7 @@ export default function BehaviorPage() {
 								<div className="flex items-center gap-2">
 									<Button
 										disabled={isMutating}
-										onClick={() => void handleReset(behavior)}
+										onClick={() => void handleReset(prompt)}
 										size="sm"
 										type="button"
 										variant="outline"
@@ -287,7 +290,7 @@ export default function BehaviorPage() {
 									<BaseSubmitButton
 										disabled={!(isDirty && draft.trim())}
 										isSubmitting={isMutating}
-										onClick={() => void handleSave(behavior)}
+										onClick={() => void handleSave(prompt)}
 										size="sm"
 										type="button"
 									>

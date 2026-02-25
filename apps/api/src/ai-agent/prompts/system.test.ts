@@ -80,6 +80,10 @@ function buildPromptWithVisitor(options: {
 	});
 }
 
+function countOccurrences(input: string, pattern: string): number {
+	return input.split(pattern).length - 1;
+}
+
 describe("buildSystemPrompt skill sections", () => {
 	it("renders tool skills, available custom metadata, and loaded custom skills separately", () => {
 		const prompt = buildPromptWithSkills({
@@ -163,6 +167,14 @@ describe("buildSystemPrompt skill sections", () => {
 });
 
 describe("buildSystemPrompt visitor contact behavior", () => {
+	it("does not inject deprecated structured-output policy block", () => {
+		const prompt = buildPromptWithVisitor({
+			visitorContext: { isIdentified: false } as VisitorContext,
+		});
+
+		expect(prompt).not.toContain("## IMPORTANT: Tools Are Required");
+	});
+
 	it("includes visitor contact instructions for unidentified visitors", () => {
 		const prompt = buildPromptWithVisitor({
 			visitorContext: { isIdentified: false } as VisitorContext,
@@ -240,5 +252,19 @@ describe("buildSystemPrompt visitor contact behavior", () => {
 		});
 
 		expect(prompt).not.toContain("## Visitor Identification");
+	});
+
+	it("includes policy sections at most once when enabled", () => {
+		const prompt = buildPromptWithVisitor({
+			visitorContext: { isIdentified: false } as VisitorContext,
+		});
+
+		expect(
+			countOccurrences(prompt, "## Participation Policy (Important)")
+		).toBe(1);
+		expect(countOccurrences(prompt, "## Knowledge Retrieval - CRITICAL")).toBe(
+			1
+		);
+		expect(countOccurrences(prompt, "## Final check")).toBe(1);
 	});
 });

@@ -23,7 +23,10 @@ import type { ContinuationHint } from "../pipeline/1b-continuation-gate";
 import type { ResponseMode } from "../pipeline/2-decision";
 import type { SmartDecisionResult } from "../pipeline/2a-smart-decision";
 import { getBehaviorSettings } from "../settings";
-import { buildBehaviorInstructions } from "./instructions";
+import {
+	buildBehaviorInstructions,
+	buildCapabilitiesInstructions,
+} from "./instructions";
 import type { ResolvedPromptBundle } from "./resolver";
 import { CORE_SECURITY_PROMPT, SECURITY_REMINDER } from "./security";
 import { PROMPT_TEMPLATES } from "./templates";
@@ -97,14 +100,17 @@ export function buildSystemPrompt(input: BuildPromptInput): string {
 	const coreDocuments = promptBundle?.coreDocuments;
 	const visitorContactBehavior = getBehaviorPromptDefinition("visitor_contact");
 
+	// Immutable core docs: security is always enforced from code fallback.
 	const securityDocument = getCoreDocumentContent(
 		coreDocuments?.["security.md"]?.content,
 		CORE_SECURITY_PROMPT
 	);
+	// Agent persona doc stays controlled by aiAgent.basePrompt.
 	const agentDocument = getCoreDocumentContent(
 		coreDocuments?.["agent.md"]?.content,
 		aiAgent.basePrompt
 	);
+	// Editable core docs: all non-security policy docs can be overridden in settings.
 	const behaviourDocument = getCoreDocumentContent(
 		coreDocuments?.["behaviour.md"]?.content,
 		buildBehaviorInstructions(settings, mode)
@@ -119,7 +125,7 @@ export function buildSystemPrompt(input: BuildPromptInput): string {
 	);
 	const capabilitiesDocument = getCoreDocumentContent(
 		coreDocuments?.["capabilities.md"]?.content,
-		""
+		buildCapabilitiesInstructions(settings)
 	);
 	const visitorContactDocument = getCoreDocumentContent(
 		coreDocuments?.["visitor-contact.md"]?.content,
@@ -177,9 +183,6 @@ export function buildSystemPrompt(input: BuildPromptInput): string {
 	if (participationDocument) {
 		parts.push(participationDocument);
 	}
-
-	// Add structured output instructions
-	parts.push(PROMPT_TEMPLATES.STRUCTURED_OUTPUT);
 
 	if (behaviourDocument) {
 		parts.push(behaviourDocument);

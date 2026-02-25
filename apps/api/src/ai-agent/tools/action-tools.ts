@@ -123,8 +123,7 @@ const waitSchema = z.object({
  */
 export function createRespondTool(ctx?: ToolContext) {
 	return tool({
-		description:
-			"FINISH action: Call AFTER sendMessage() to complete your turn. Use when you've answered the visitor's question or provided the requested help. Do NOT call without first calling sendMessage().",
+		description: "Finish the run with a normal response outcome.",
 		inputSchema: respondSchema,
 		execute: async ({
 			reasoning,
@@ -147,8 +146,7 @@ export function createRespondTool(ctx?: ToolContext) {
  */
 export function createEscalateTool(ctx?: ToolContext) {
 	return tool({
-		description:
-			"FINISH action: Hand off to human support. Call AFTER sendMessage() telling the visitor you're connecting them with a team member. Also call sendPrivateMessage() to give the human agent context about the issue. DO NOT call this if the conversation is already escalated.",
+		description: "Finish the run with an escalation to human support.",
 		inputSchema: escalateSchema,
 		execute: async ({
 			reason,
@@ -198,8 +196,7 @@ export function createEscalateTool(ctx?: ToolContext) {
  */
 export function createResolveTool(ctx?: ToolContext) {
 	return tool({
-		description:
-			"FINISH action: Mark conversation as resolved/complete. Call AFTER sendMessage() with a closing message. Use when the visitor's issue is fully addressed and they've confirmed satisfaction or said goodbye.",
+		description: "Finish the run by marking the conversation resolved.",
 		inputSchema: resolveSchema,
 		execute: async ({
 			reasoning,
@@ -222,8 +219,7 @@ export function createResolveTool(ctx?: ToolContext) {
  */
 export function createMarkSpamTool(ctx?: ToolContext) {
 	return tool({
-		description:
-			"FINISH action: Mark conversation as spam/abuse and close it. Use ONLY for obvious spam, bots, or abusive content. Does not require sendMessage() first since we don't respond to spam.",
+		description: "Finish the run by marking the conversation as spam/abuse.",
 		inputSchema: markSpamSchema,
 		execute: async ({
 			reasoning,
@@ -246,8 +242,7 @@ export function createMarkSpamTool(ctx?: ToolContext) {
  */
 export function createSkipTool(ctx?: ToolContext) {
 	return tool({
-		description:
-			"FINISH action: Skip responding entirely. Use ONLY when a human agent is actively handling the conversation, or when the message doesn't require any response (e.g., visitor just said 'ok' or 'thanks'). Does not require sendMessage() first.",
+		description: "Finish the run without sending any public reply.",
 		inputSchema: skipSchema,
 		execute: async ({
 			reasoning,
@@ -269,8 +264,7 @@ export function createSkipTool(ctx?: ToolContext) {
  */
 export function createWaitTool(ctx?: ToolContext) {
 	return tool({
-		description:
-			"FINISH action: Wait briefly and re-evaluate from decision stage. Use when more immediate context may arrive and sending now would likely interrupt or duplicate.",
+		description: "Finish the run by deferring action for a near-term retry.",
 		inputSchema: waitSchema,
 		execute: async ({
 			reasoning,

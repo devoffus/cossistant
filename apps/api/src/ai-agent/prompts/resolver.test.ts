@@ -162,12 +162,42 @@ describe("resolvePromptBundle", () => {
 		expect(resolveSkill?.source).toBe("tool");
 	});
 
-	it("loads editable core overrides and ignores non-editable core overrides", async () => {
+	it("loads all editable core overrides and ignores immutable core overrides", async () => {
 		mockedDocuments = [
+			createCoreDocument({
+				id: "01JTESTBEHAVIOVERRIDE0000",
+				name: "behaviour.md",
+				content: "custom behaviour core document",
+			}),
+			createCoreDocument({
+				id: "01JTESTPARTICIPATION00000",
+				name: "participation.md",
+				content: "custom participation core document",
+			}),
+			createCoreDocument({
+				id: "01JTESTGROUNDING00000000",
+				name: "grounding.md",
+				content: "custom grounding core document",
+			}),
+			createCoreDocument({
+				id: "01JTESTCAPABILITIES00000",
+				name: "capabilities.md",
+				content: "custom capabilities core document",
+			}),
+			createCoreDocument({
+				id: "01JTESTVISITORCONTACT000",
+				name: "visitor-contact.md",
+				content: "custom visitor-contact core document",
+			}),
 			createCoreDocument({
 				id: "01JTESTDECISIONOVERRIDE0000",
 				name: "decision.md",
 				content: "custom decision core document",
+			}),
+			createCoreDocument({
+				id: "01JTESTAGENTOVERRIDE00000",
+				name: "agent.md",
+				content: "attempted agent override",
 			}),
 			createCoreDocument({
 				id: "01JTESTSECURITYOVERRIDE0000",
@@ -183,10 +213,31 @@ describe("resolvePromptBundle", () => {
 			mode: "respond_to_visitor",
 		});
 
+		expect(bundle.coreDocuments["behaviour.md"]?.content).toBe(
+			"custom behaviour core document"
+		);
+		expect(bundle.coreDocuments["behaviour.md"]?.source).toBe("override");
+		expect(bundle.coreDocuments["participation.md"]?.content).toBe(
+			"custom participation core document"
+		);
+		expect(bundle.coreDocuments["participation.md"]?.source).toBe("override");
+		expect(bundle.coreDocuments["grounding.md"]?.content).toBe(
+			"custom grounding core document"
+		);
+		expect(bundle.coreDocuments["grounding.md"]?.source).toBe("override");
+		expect(bundle.coreDocuments["capabilities.md"]?.content).toBe(
+			"custom capabilities core document"
+		);
+		expect(bundle.coreDocuments["capabilities.md"]?.source).toBe("override");
+		expect(bundle.coreDocuments["visitor-contact.md"]?.content).toBe(
+			"custom visitor-contact core document"
+		);
+		expect(bundle.coreDocuments["visitor-contact.md"]?.source).toBe("override");
 		expect(bundle.coreDocuments["decision.md"]?.content).toBe(
 			"custom decision core document"
 		);
 		expect(bundle.coreDocuments["decision.md"]?.source).toBe("override");
+		expect(bundle.coreDocuments["agent.md"]?.source).toBe("fallback");
 		expect(bundle.coreDocuments["security.md"]?.source).toBe("fallback");
 	});
 

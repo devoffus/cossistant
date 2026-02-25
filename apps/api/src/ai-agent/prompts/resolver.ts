@@ -2,7 +2,7 @@ import { getBehaviorPromptDefinition } from "@api/ai-agent/behaviors/catalog";
 import {
 	CORE_PROMPT_DOCUMENT_NAMES,
 	type CorePromptDocumentName,
-	EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAME_SET,
+	EDITABLE_CORE_PROMPT_DOCUMENT_NAME_SET,
 } from "@api/ai-agent/prompts/documents";
 import {
 	buildCapabilitiesInstructions,
@@ -49,7 +49,7 @@ type ResolvePromptBundleInput = {
 	mode: ResponseMode;
 };
 
-function buildFallbackCoreDocuments(
+export function buildFallbackCoreDocuments(
 	aiAgent: AiAgentSelect,
 	mode: ResponseMode
 ): Record<CorePromptDocumentName, string> {
@@ -150,7 +150,7 @@ export async function resolvePromptBundle(
 			continue;
 		}
 
-		if (!EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAME_SET.has(document.name)) {
+		if (!EDITABLE_CORE_PROMPT_DOCUMENT_NAME_SET.has(document.name)) {
 			continue;
 		}
 

@@ -27,7 +27,7 @@ export const AI_AGENT_GOALS = [
 
 export type AIAgentGoal = (typeof AI_AGENT_GOALS)[number]["value"];
 
-const AI_AGENT_CORE_PROMPT_DOCUMENT_NAMES = [
+export const AI_AGENT_CORE_PROMPT_DOCUMENT_NAMES = [
 	"agent.md",
 	"security.md",
 	"behaviour.md",
@@ -37,6 +37,19 @@ const AI_AGENT_CORE_PROMPT_DOCUMENT_NAMES = [
 	"grounding.md",
 	"capabilities.md",
 ] as const;
+export type AiAgentCorePromptDocumentName =
+	(typeof AI_AGENT_CORE_PROMPT_DOCUMENT_NAMES)[number];
+
+export const AI_AGENT_EDITABLE_CORE_PROMPT_DOCUMENT_NAMES = [
+	"behaviour.md",
+	"participation.md",
+	"grounding.md",
+	"capabilities.md",
+	"visitor-contact.md",
+	"decision.md",
+] as const;
+export type AiAgentEditableCorePromptDocumentName =
+	(typeof AI_AGENT_EDITABLE_CORE_PROMPT_DOCUMENT_NAMES)[number];
 
 export const AI_AGENT_BEHAVIOR_PROMPT_IDS = [
 	"visitor_contact",
@@ -620,12 +633,29 @@ export const aiAgentBehaviorPromptIdSchema = z.enum(
 export const aiAgentBehaviorPromptDocumentNameSchema = z.enum(
 	AI_AGENT_BEHAVIOR_PROMPT_DOCUMENT_NAMES
 );
+export const aiAgentCorePromptDocumentNameSchema = z.enum(
+	AI_AGENT_CORE_PROMPT_DOCUMENT_NAMES
+);
+export const aiAgentEditableCorePromptDocumentNameSchema = z.enum(
+	AI_AGENT_EDITABLE_CORE_PROMPT_DOCUMENT_NAMES
+);
 
 export const aiAgentBehaviorPromptPresetSchema = z.object({
 	id: z.string(),
 	label: z.string(),
 	description: z.string(),
 	content: z.string(),
+});
+
+export const aiAgentPromptStudioEntrySchema = z.object({
+	documentName: aiAgentEditableCorePromptDocumentNameSchema,
+	label: z.string(),
+	description: z.string(),
+	content: z.string(),
+	defaultContent: z.string(),
+	hasOverride: z.boolean(),
+	documentId: z.ulid().nullable(),
+	presets: z.array(aiAgentBehaviorPromptPresetSchema),
 });
 
 export const aiAgentBehaviorStudioEntrySchema = z.object({
@@ -656,6 +686,22 @@ export const getBehaviorStudioResponseSchema = z.object({
 	behaviors: z.array(aiAgentBehaviorStudioEntrySchema),
 });
 
+export const getPromptStudioRequestSchema = z.object({
+	websiteSlug: z.string().openapi({
+		description: "The website slug.",
+		example: "my-website",
+	}),
+	aiAgentId: z.ulid().openapi({
+		description: "The AI agent ID.",
+		example: "01JG000000000000000000000",
+	}),
+});
+
+export const getPromptStudioResponseSchema = z.object({
+	aiAgentId: z.ulid(),
+	corePrompts: z.array(aiAgentPromptStudioEntrySchema),
+});
+
 export const upsertBehaviorPromptRequestSchema = z.object({
 	websiteSlug: z.string().openapi({
 		description: "The website slug.",
@@ -672,10 +718,29 @@ export const upsertBehaviorPromptRequestSchema = z.object({
 	}),
 });
 
+export const upsertCorePromptRequestSchema = z.object({
+	websiteSlug: z.string().openapi({
+		description: "The website slug.",
+		example: "my-website",
+	}),
+	aiAgentId: z.ulid().openapi({
+		description: "The AI agent ID.",
+		example: "01JG000000000000000000000",
+	}),
+	documentName: aiAgentEditableCorePromptDocumentNameSchema,
+	content: z.string().max(50_000).openapi({
+		description: "Prompt content for the selected core policy document.",
+		example: "## Participation Policy\\nSend one concise public reply per run.",
+	}),
+});
+
 export const upsertBehaviorPromptResponseSchema = z.object({
 	removed: z.boolean(),
 	document: aiAgentPromptDocumentResponseSchema.nullable(),
 });
+
+export const upsertCorePromptResponseSchema =
+	upsertBehaviorPromptResponseSchema;
 
 export const resetBehaviorPromptRequestSchema = z.object({
 	websiteSlug: z.string().openapi({
@@ -689,9 +754,23 @@ export const resetBehaviorPromptRequestSchema = z.object({
 	behaviorId: aiAgentBehaviorPromptIdSchema,
 });
 
+export const resetCorePromptRequestSchema = z.object({
+	websiteSlug: z.string().openapi({
+		description: "The website slug.",
+		example: "my-website",
+	}),
+	aiAgentId: z.ulid().openapi({
+		description: "The AI agent ID.",
+		example: "01JG000000000000000000000",
+	}),
+	documentName: aiAgentEditableCorePromptDocumentNameSchema,
+});
+
 export const resetBehaviorPromptResponseSchema = z.object({
 	removed: z.boolean(),
 });
+
+export const resetCorePromptResponseSchema = resetBehaviorPromptResponseSchema;
 
 export type AiAgentResponse = z.infer<typeof aiAgentResponseSchema>;
 export type CreateAiAgentRequest = z.infer<typeof createAiAgentRequestSchema>;
@@ -740,6 +819,9 @@ export type ResetToolSkillOverrideRequest = z.infer<
 export type AiAgentBehaviorPromptPreset = z.infer<
 	typeof aiAgentBehaviorPromptPresetSchema
 >;
+export type AiAgentPromptStudioEntry = z.infer<
+	typeof aiAgentPromptStudioEntrySchema
+>;
 export type AiAgentBehaviorStudioEntry = z.infer<
 	typeof aiAgentBehaviorStudioEntrySchema
 >;
@@ -749,17 +831,35 @@ export type GetBehaviorStudioRequest = z.infer<
 export type GetBehaviorStudioResponse = z.infer<
 	typeof getBehaviorStudioResponseSchema
 >;
+export type GetPromptStudioRequest = z.infer<
+	typeof getPromptStudioRequestSchema
+>;
+export type GetPromptStudioResponse = z.infer<
+	typeof getPromptStudioResponseSchema
+>;
 export type UpsertBehaviorPromptRequest = z.infer<
 	typeof upsertBehaviorPromptRequestSchema
 >;
 export type UpsertBehaviorPromptResponse = z.infer<
 	typeof upsertBehaviorPromptResponseSchema
 >;
+export type UpsertCorePromptRequest = z.infer<
+	typeof upsertCorePromptRequestSchema
+>;
+export type UpsertCorePromptResponse = z.infer<
+	typeof upsertCorePromptResponseSchema
+>;
 export type ResetBehaviorPromptRequest = z.infer<
 	typeof resetBehaviorPromptRequestSchema
 >;
 export type ResetBehaviorPromptResponse = z.infer<
 	typeof resetBehaviorPromptResponseSchema
+>;
+export type ResetCorePromptRequest = z.infer<
+	typeof resetCorePromptRequestSchema
+>;
+export type ResetCorePromptResponse = z.infer<
+	typeof resetCorePromptResponseSchema
 >;
 
 /**

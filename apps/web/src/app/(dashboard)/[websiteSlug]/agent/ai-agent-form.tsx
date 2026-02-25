@@ -1,6 +1,10 @@
 "use client";
 
-import { AI_AGENT_TOOL_CATALOG, type AiAgentResponse } from "@cossistant/types";
+import {
+	AI_AGENT_TOOL_CATALOG,
+	type AiAgentResponse,
+	DEFAULT_AGENT_BASE_PROMPT,
+} from "@cossistant/types";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -114,9 +118,7 @@ export function AIAgentForm({
 		defaultValues: {
 			name: initialData?.name ?? `${websiteName} AI`,
 			description: initialData?.description ?? "",
-			basePrompt:
-				initialData?.basePrompt ??
-				"You are a helpful support assistant. Answer questions clearly and concisely. If you don't know something, say so honestly.",
+			basePrompt: initialData?.basePrompt ?? DEFAULT_AGENT_BASE_PROMPT,
 			model: initialData?.model ?? "",
 			temperature: initialData?.temperature ?? 0.7,
 			maxOutputTokens: initialData?.maxOutputTokens ?? 1024,

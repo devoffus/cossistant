@@ -46,17 +46,19 @@ The AI is NOT just a "replier" - it's a decision-making agent that chooses the b
 
 3. **Layered Security**: Immutable security prompts sandwich the user-configurable base prompt, preventing prompt injection attacks.
 
-4. **Behavior Settings**: Each AI agent can be configured with different capabilities and background analysis settings. Settings are persisted in the database and configurable via dashboard.
+4. **Prompt Governance**: `security.md` is immutable, `agent.md` is controlled by base prompt, and all other core policy docs are editable through prompt studio.
 
-5. **BullMQ Execution**: All processing happens in BullMQ workers for reliability and scalability.
+5. **Behavior Settings**: Each AI agent can be configured with different capabilities and background analysis settings. Settings are persisted in the database and configurable via dashboard.
 
-6. **Fast Response**: Queue delay is disabled; natural typing delays between messages keep responses human.
+6. **BullMQ Execution**: All processing happens in BullMQ workers for reliability and scalability.
 
-7. **Audience-Aware Events**: Progress events have audience filtering (widget vs dashboard) for appropriate visibility.
+7. **Fast Response**: Queue delay is disabled; natural typing delays between messages keep responses human.
 
-8. **Allowlist-Driven Tool Timeline Visibility**: Only allowlisted tools are treated as conversation-visible timeline activity; all other tools are persisted as log-only timeline rows.
+8. **Audience-Aware Events**: Progress events have audience filtering (widget vs dashboard) for appropriate visibility.
 
-9. **AI SDK v6-Compatible Tool Metadata**: Tool linkage and classification metadata is stored under `callProviderMetadata.cossistant.toolTimeline` (with backward-compatible `providerMetadata` support), with no new DB schema fields.
+9. **Allowlist-Driven Tool Timeline Visibility**: Only allowlisted tools are treated as conversation-visible timeline activity; all other tools are persisted as log-only timeline rows.
+
+10. **AI SDK v6-Compatible Tool Metadata**: Tool linkage and classification metadata is stored under `callProviderMetadata.cossistant.toolTimeline` (with backward-compatible `providerMetadata` support), with no new DB schema fields.
 
 ---
 
@@ -131,6 +133,8 @@ apps/api/src/ai-agent/
 │   ├── system.ts             # Dynamic system prompt (layered architecture)
 │   ├── security.ts           # Core security prompts (immutable)
 │   ├── templates.ts          # Reusable fragments
+│   ├── documents.ts          # Core/skill document naming and editability rules
+│   ├── resolver.ts           # Core + skill prompt resolution with overrides
 │   └── instructions.ts       # Behavior instructions
 │
 ├── tools/                    # LLM tools
@@ -153,7 +157,7 @@ apps/api/src/ai-agent/
 │   ├── categorization.ts     # Auto-categorize
 │   └── injection.ts          # Prompt injection detection
 │
-├── output/                   # Structured output
+├── output/                   # Output parsing utilities (tool-loop compatibility)
 │   ├── schemas.ts            # Zod schemas
 │   └── parser.ts             # Parse & validate
 │

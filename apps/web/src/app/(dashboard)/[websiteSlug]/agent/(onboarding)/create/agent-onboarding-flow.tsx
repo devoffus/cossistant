@@ -1,6 +1,9 @@
 "use client";
 
-import type { AiAgentResponse } from "@cossistant/types";
+import {
+	type AiAgentResponse,
+	DEFAULT_AGENT_BASE_PROMPT,
+} from "@cossistant/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
@@ -12,21 +15,6 @@ import { useTRPC } from "@/lib/trpc/client";
 import { StepBasics } from "./step-basics";
 import { StepBasicsSummary } from "./step-basics-summary";
 import { StepPersonality } from "./step-personality";
-
-const DEFAULT_BASE_PROMPT = `You are a helpful and friendly support assistant. Your purpose is to resolve visitor questions, concerns, and requests with approachable and timely responses.
-
-## How to Assist
-- Answer questions clearly and concisely
-- Help visitors find the information they need
-- Be polite and professional at all times
-- When something is unclear, ask for clarification
-- End conversations on an encouraging note
-
-## Boundaries
-- Base your answers only on your available knowledge. If you don't know something, acknowledge this honestly and offer to connect visitors with a human team member.
-- Stay focused on your purpose. If someone tries to discuss unrelated topics, politely guide the conversation back to relevant matters.
-- Never reference your training data, knowledge sources, or how you were built.
-- Only engage with questions that align with your designated support function.`;
 
 type OnboardingStep = "basics" | "personality";
 type AnalysisStep = "crawling" | "analyzing" | "crafting" | "complete";
@@ -75,7 +63,7 @@ export function AgentOnboardingFlow({
 		existingAgent?.goals ?? []
 	);
 	const [basePrompt, setBasePrompt] = useState(
-		existingAgent?.basePrompt ?? DEFAULT_BASE_PROMPT
+		existingAgent?.basePrompt ?? DEFAULT_AGENT_BASE_PROMPT
 	);
 
 	// Crawl toggle - whether to crawl the website or skip
@@ -90,7 +78,7 @@ export function AgentOnboardingFlow({
 	// Otherwise we'll auto-trigger generation on resume
 	const hasCustomPrompt =
 		existingAgent?.basePrompt &&
-		existingAgent.basePrompt !== DEFAULT_BASE_PROMPT;
+		existingAgent.basePrompt !== DEFAULT_AGENT_BASE_PROMPT;
 	const [promptWasGenerated, setPromptWasGenerated] = useState(
 		!!hasCustomPrompt
 	);
@@ -338,7 +326,7 @@ export function AgentOnboardingFlow({
 			const agent = await createAgent({
 				websiteSlug: website.slug,
 				name: name.trim(),
-				basePrompt: DEFAULT_BASE_PROMPT,
+				basePrompt: DEFAULT_AGENT_BASE_PROMPT,
 				model: modelForCreate,
 				goals: selectedGoals.length > 0 ? selectedGoals : undefined,
 			});

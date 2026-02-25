@@ -25,7 +25,7 @@ const inputSchema = z.object({
 export function createSendPrivateMessageTool(ctx: ToolContext) {
 	return tool({
 		description:
-			"Send an internal note visible ONLY to the support team (visitor cannot see). Use when escalating to provide context, or to document important information for human agents.",
+			"Send an internal note visible to teammates but hidden from the visitor.",
 		inputSchema,
 		execute: async ({
 			message,

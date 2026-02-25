@@ -77,8 +77,7 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 	{
 		id: "searchKnowledgeBase",
 		label: "Search Knowledge Base",
-		description:
-			"Look up reliable product or policy context before answering factual requests.",
+		description: "Retrieve relevant knowledge snippets by keyword query.",
 		category: "context",
 		group: "behavior",
 		order: 1,
@@ -89,24 +88,23 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "search-knowledge-base.md",
 			label: "Search Knowledge Base",
-			description: "How to retrieve and ground facts before answering.",
-			content: `## Retrieval Rules
+			description: "Keyword query patterns and result interpretation.",
+			content: `## Query Tactics
 
-- Search before answering factual or policy questions.
-- Start narrow, then broaden if no reliable match is found.
-- Prefer one strong source over many weak guesses.
+- Use short keyword queries (2-6 words).
+- Retry with synonyms when results are weak.
+- Prefer specific product/feature terms over full sentences.
 
-## Output Rules
+## Result Use
 
-- If no reliable answer is found, say that clearly and escalate when needed.
-- Never invent pricing, policy, or product details.`,
+- Prioritize high-similarity results that directly answer the request.
+- Use title/source metadata when it clarifies confidence.`,
 		},
 	},
 	{
 		id: "identifyVisitor",
 		label: "Identify Visitor",
-		description:
-			"Collect and link visitor identity details when account-specific support is needed.",
+		description: "Attach visitor name/email to the conversation record.",
 		category: "context",
 		group: "behavior",
 		order: 2,
@@ -117,19 +115,18 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "identify-visitor.md",
 			label: "Identify Visitor",
-			description: "When to ask for name/email and how to use identification.",
-			content: `## Identification Rules
+			description: "Input hygiene for profile linking.",
+			content: `## Input Hygiene
 
-- Ask for name and email only when account context is required.
-- Validate basic email shape before linking identity.
-- Update details if the visitor corrects prior information.`,
+- Pass clean name/email values without extra text.
+- Use the latest visitor-provided values if they correct earlier info.
+- Avoid duplicate calls when identity is already up to date.`,
 		},
 	},
 	{
 		id: "updateConversationTitle",
 		label: "Update Conversation Title",
-		description:
-			"Keep titles clear and specific so the team can scan conversations quickly.",
+		description: "Set a concise title for the conversation topic.",
 		category: "analysis",
 		group: "behavior",
 		order: 3,
@@ -140,19 +137,19 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "update-conversation-title.md",
 			label: "Update Conversation Title",
-			description: "How to set concise, actionable conversation titles.",
-			content: `## Title Rules
+			description: "Title formatting conventions.",
+			content: `## Title Formatting
 
-- Keep titles short, specific, and issue-focused.
-- Avoid generic titles like "Support question".
-- Update title when the conversation topic changes materially.`,
+- Keep titles short and issue-focused.
+- Use concrete nouns (feature, error, account area).
+- Update only when the conversation topic materially changes.`,
 		},
 	},
 	{
 		id: "updateSentiment",
 		label: "Update Sentiment",
 		description:
-			"Track meaningful tone changes so urgency and escalation signals stay accurate.",
+			"Record meaningful sentiment changes for conversation analytics.",
 		category: "analysis",
 		group: "behavior",
 		order: 4,
@@ -163,20 +160,18 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "update-sentiment.md",
 			label: "Update Sentiment",
-			description:
-				"When to record sentiment changes and how to keep them precise.",
-			content: `## Sentiment Rules
+			description: "When sentiment updates add signal.",
+			content: `## Sentiment Updates
 
-- Update sentiment only on meaningful tone shifts.
-- Keep sentiment reasons short and factual.
-- Avoid over-updating for minor wording changes.`,
+- Update only for clear tone shifts.
+- Keep rationale short and evidence-based.
+- Skip minor wording changes with no practical impact.`,
 		},
 	},
 	{
 		id: "setPriority",
 		label: "Set Priority",
-		description:
-			"Assign urgency consistently so critical issues surface fast for the team.",
+		description: "Set operational urgency for the conversation.",
 		category: "analysis",
 		group: "behavior",
 		order: 5,
@@ -187,13 +182,13 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "set-priority.md",
 			label: "Set Priority",
-			description: "How to map issue severity to priority levels.",
-			content: `## Priority Rules
+			description: "Priority mapping by impact and urgency.",
+			content: `## Priority Mapping
 
 - Urgent: outage, security, or severe business impact.
-- High: blocked workflow with no good workaround.
-- Normal: standard support flow.
-- Low: informational or low-impact request.`,
+- High: blocked workflow with no practical workaround.
+- Normal: standard support work.
+- Low: informational, non-blocking requests.`,
 		},
 	},
 	{
@@ -210,17 +205,12 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "send-message.md",
 			label: "Send Public Message",
-			description: "Tone and structure for public replies.",
-			content: `## Reply Style
+			description: "Public message composition hints.",
+			content: `## Message Composition
 
-- Be concise, direct, and calm.
-- Use plain language.
-- Prefer one clear next step.
-
-## Quality Rules
-
-- Avoid repeating prior messages.
-- If uncertain, state uncertainty clearly instead of guessing.`,
+- Keep messages concise and easy to scan.
+- Prefer one clear next step when action is needed.
+- Match visitor language and context from the active thread.`,
 		},
 	},
 	{
@@ -237,12 +227,12 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "send-private-message.md",
 			label: "Send Private Note",
-			description: "How to write compact and useful internal notes.",
-			content: `## Private Note Rules
+			description: "Internal-note structure for handoff quality.",
+			content: `## Internal Note Structure
 
-- Include issue summary, key facts, and what has already been tried.
-- Keep notes scannable and operational.
-- Avoid customer-facing tone in internal notes.`,
+- Include issue summary, key facts, and actions already attempted.
+- Keep notes scannable for fast teammate handoff.
+- Use internal operational tone (not customer-facing copy).`,
 		},
 	},
 	{
@@ -259,12 +249,11 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "respond.md",
 			label: "Finish Respond",
-			description: "When to end with a completed response.",
-			content: `## Respond Rules
+			description: "When to select the respond finish action.",
+			content: `## Finish Semantics
 
-- Use respond when the visitor has a complete, useful answer.
-- Do not respond before the public message is sent.
-- End cleanly once the turn is complete.`,
+- Choose this when the turn is complete and no escalation/closure state change is required.
+- Use this as the terminal action for normal reply flows.`,
 		},
 	},
 	{
@@ -281,12 +270,11 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "escalate.md",
 			label: "Finish Escalate",
-			description: "When escalation is required and how to hand off clearly.",
-			content: `## Escalation Rules
+			description: "When to select the escalate finish action.",
+			content: `## Finish Semantics
 
-- Escalate when visitor asks for a human, risk is high, or confidence is low.
-- Tell the visitor what happens next.
-- Leave a concise private handoff note when useful.`,
+- Choose this when human intervention is required.
+- Include a clear escalation reason payload for teammate routing.`,
 		},
 	},
 	{
@@ -303,12 +291,11 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "resolve.md",
 			label: "Finish Resolve",
-			description: "Resolution criteria before closing a conversation.",
-			content: `## Resolve Rules
+			description: "When to select the resolve finish action.",
+			content: `## Finish Semantics
 
-- Resolve only when the request is fully addressed.
-- Ensure no unresolved dependency remains.
-- Confirm closure is clear in the final response.`,
+- Choose this when the issue is closed and the conversation can be marked resolved.
+- Use resolution-oriented reasoning in the payload.`,
 		},
 	},
 	{
@@ -325,12 +312,11 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "mark-spam.md",
 			label: "Finish Mark Spam",
-			description: "Strict criteria for spam classification.",
-			content: `## Spam Rules
+			description: "When to select the spam finish action.",
+			content: `## Finish Semantics
 
-- Mark spam only when abuse or bot patterns are obvious.
-- Do not classify valid but difficult requests as spam.
-- Prefer caution if confidence is low.`,
+- Choose this for clear spam/abuse/bot traffic.
+- Capture concise evidence in reasoning for auditability.`,
 		},
 	},
 	{
@@ -347,11 +333,11 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "skip.md",
 			label: "Finish Skip",
-			description: "When intentional silence is the correct action.",
-			content: `## Skip Rules
+			description: "When to select the skip finish action.",
+			content: `## Finish Semantics
 
-- Skip when no added value would come from another reply.
-- Skip for acknowledgements or resolved conversations with no open need.`,
+- Choose this when no additional assistant output is needed for this run.
+- Use reasoning that explains why silence is intentional.`,
 		},
 	},
 	{
@@ -368,11 +354,11 @@ const AI_AGENT_TOOL_CATALOG_RAW: readonly RawToolCatalogEntry[] = [
 		defaultSkill: {
 			name: "wait.md",
 			label: "Finish Wait",
-			description: "When to defer and evaluate again shortly.",
-			content: `## Wait Rules
+			description: "When to select the wait finish action.",
+			content: `## Finish Semantics
 
-- Wait when immediate action is premature and near-term context may change.
-- Do not wait repeatedly without a clear reason.`,
+- Choose this when near-term context is likely to change before acting.
+- Provide reasoning for why deferment is preferable now.`,
 		},
 	},
 ] as const;

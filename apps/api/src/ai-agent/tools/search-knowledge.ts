@@ -132,7 +132,7 @@ function formatResults(results: ChunkSearchResult[]): KnowledgeResult[] {
 export function createSearchKnowledgeBaseTool(ctx: ToolContext) {
 	return tool({
 		description:
-			"Search the knowledge base for information to answer the visitor's question. ALWAYS call this BEFORE answering factual questions about the product, company, pricing, features, or policies. Use short, specific queries — not the visitor's full message. You can call this multiple times with different queries to find comprehensive information. Never make up answers — only use what search returns.",
+			"Search indexed knowledge content using a short keyword query and return ranked evidence snippets.",
 		inputSchema,
 		execute: async (
 			{ query },

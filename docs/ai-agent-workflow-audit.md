@@ -10,6 +10,13 @@
 - **Main simplification opportunity:** Consolidate repeated behavioral rules into one authoritative policy block and keep dynamic prompt sections strictly data/context.
 - **Scale readiness:** Good base for scale, but reliability can improve with stricter deterministic pre-rules for high-risk intents and a smaller, clearer prompt contract.
 
+## Status Update (Prompt Governance Cleanup v2)
+- Dynamic `STRUCTURED_OUTPUT` injection was removed from runtime prompt assembly.
+- `TOOLS_AVAILABLE` now lists runtime tool inventory only (no duplicated policy prose).
+- Editable core-doc scope now includes `behaviour.md`, `participation.md`, `grounding.md`, `capabilities.md`, `visitor-contact.md`, and `decision.md`.
+- `security.md` remains immutable and enforced as canonical security policy.
+- A generic core prompt studio API was added with behavior endpoints preserved as compatibility wrappers.
+
 ## What Is Already Fail-Safe
 1. **Pipeline hard gates before generation**
    - Intake can short-circuit quickly.

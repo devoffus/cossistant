@@ -1,12 +1,15 @@
 import {
 	getBehaviorPromptCatalog,
 	getBehaviorPromptDefinition,
+	getEditableCorePromptCatalog,
 } from "@api/ai-agent/behaviors/catalog";
 import { buildCapabilitiesStudioResponse } from "@api/ai-agent/capabilities-studio";
 import {
+	EDITABLE_CORE_PROMPT_DOCUMENT_NAME_SET,
 	PromptDocumentConflictError,
 	PromptDocumentValidationError,
 } from "@api/ai-agent/prompts/documents";
+import { buildFallbackCoreDocuments } from "@api/ai-agent/prompts/resolver";
 import { getBehaviorSettings } from "@api/ai-agent/settings";
 import {
 	createAiAgent,
@@ -60,8 +63,12 @@ import {
 	getBehaviorStudioResponseSchema,
 	getCapabilitiesStudioRequestSchema,
 	getCapabilitiesStudioResponseSchema,
+	getPromptStudioRequestSchema,
+	getPromptStudioResponseSchema,
 	resetBehaviorPromptRequestSchema,
 	resetBehaviorPromptResponseSchema,
+	resetCorePromptRequestSchema,
+	resetCorePromptResponseSchema,
 	resetToolSkillOverrideRequestSchema,
 	toggleAiAgentActiveRequestSchema,
 	toggleSkillDocumentRequestSchema,
@@ -71,6 +78,8 @@ import {
 	updateSkillDocumentRequestSchema,
 	upsertBehaviorPromptRequestSchema,
 	upsertBehaviorPromptResponseSchema,
+	upsertCorePromptRequestSchema,
+	upsertCorePromptResponseSchema,
 	upsertToolSkillOverrideRequestSchema,
 } from "@cossistant/types";
 import { TRPCError } from "@trpc/server";
@@ -175,6 +184,181 @@ function handlePromptDocumentMutationError(error: unknown): never {
 	}
 
 	throw error;
+}
+
+function assertEditableCorePromptDocumentName(name: string): void {
+	if (!EDITABLE_CORE_PROMPT_DOCUMENT_NAME_SET.has(name)) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "This core prompt document is immutable.",
+		});
+	}
+}
+
+async function buildPromptStudioEntries(params: {
+	db: Parameters<typeof listAiAgentPromptDocuments>[0];
+	organizationId: string;
+	websiteId: string;
+	aiAgent: NonNullable<Awaited<ReturnType<typeof getAiAgentForWebsite>>>;
+}) {
+	const coreDocuments = await listAiAgentPromptDocuments(
+		params.db,
+		{
+			organizationId: params.organizationId,
+			websiteId: params.websiteId,
+			aiAgentId: params.aiAgent.id,
+		},
+		{ kind: "core" }
+	);
+
+	const coreDocumentByName = new Map(
+		coreDocuments
+			.filter((document) => document.enabled)
+			.map((document) => [document.name, document])
+	);
+
+	const fallbackDocuments = buildFallbackCoreDocuments(
+		params.aiAgent,
+		"respond_to_visitor"
+	);
+
+	const corePrompts = getEditableCorePromptCatalog().map((definition) => {
+		const overrideDocument = coreDocumentByName.get(definition.documentName);
+		const defaultContent = fallbackDocuments[definition.documentName].trim();
+		const content = overrideDocument?.content ?? defaultContent;
+		const hasOverride = overrideDocument
+			? overrideDocument.content.trim() !== defaultContent
+			: false;
+
+		return {
+			documentName: definition.documentName,
+			label: definition.label,
+			description: definition.description,
+			content,
+			defaultContent,
+			hasOverride,
+			documentId: overrideDocument?.id ?? null,
+			presets: [...definition.presets],
+		};
+	});
+
+	return {
+		aiAgentId: params.aiAgent.id,
+		corePrompts,
+	};
+}
+
+async function upsertEditableCorePromptDocument(params: {
+	db: Parameters<typeof upsertAiAgentCorePromptDocument>[0];
+	organizationId: string;
+	websiteId: string;
+	aiAgent: NonNullable<Awaited<ReturnType<typeof getAiAgentForWebsite>>>;
+	updatedByUserId: string;
+	documentName: string;
+	content: string;
+}) {
+	assertEditableCorePromptDocumentName(params.documentName);
+
+	const nextContent = params.content.trim();
+	if (!nextContent) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message: "Prompt content cannot be empty",
+		});
+	}
+
+	const fallbackDocuments = buildFallbackCoreDocuments(
+		params.aiAgent,
+		"respond_to_visitor"
+	);
+	const defaultContent =
+		fallbackDocuments[
+			params.documentName as keyof typeof fallbackDocuments
+		]?.trim() ?? "";
+
+	if (nextContent === defaultContent) {
+		const removed = await deleteAiAgentCorePromptDocumentByName(params.db, {
+			organizationId: params.organizationId,
+			websiteId: params.websiteId,
+			aiAgentId: params.aiAgent.id,
+			name: params.documentName,
+		});
+
+		return {
+			removed,
+			document: null,
+		};
+	}
+
+	try {
+		const document = await upsertAiAgentCorePromptDocument(params.db, {
+			organizationId: params.organizationId,
+			websiteId: params.websiteId,
+			aiAgentId: params.aiAgent.id,
+			name: params.documentName,
+			content: nextContent,
+			updatedByUserId: params.updatedByUserId,
+		});
+
+		return {
+			removed: false,
+			document: toPromptDocumentResponse(document),
+		};
+	} catch (error) {
+		handlePromptDocumentMutationError(error);
+	}
+}
+
+async function resetEditableCorePromptDocument(params: {
+	db: Parameters<typeof deleteAiAgentCorePromptDocumentByName>[0];
+	organizationId: string;
+	websiteId: string;
+	aiAgentId: string;
+	documentName: string;
+}) {
+	assertEditableCorePromptDocumentName(params.documentName);
+
+	const removed = await deleteAiAgentCorePromptDocumentByName(params.db, {
+		organizationId: params.organizationId,
+		websiteId: params.websiteId,
+		aiAgentId: params.aiAgentId,
+		name: params.documentName,
+	});
+
+	return { removed };
+}
+
+async function getWebsiteAndAgentForPromptStudio(params: {
+	db: Parameters<typeof getWebsiteBySlugWithAccess>[0];
+	userId: string;
+	websiteSlug: string;
+	aiAgentId: string;
+}) {
+	const websiteData = await getWebsiteBySlugWithAccess(params.db, {
+		userId: params.userId,
+		websiteSlug: params.websiteSlug,
+	});
+
+	if (!websiteData) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "Website not found or access denied",
+		});
+	}
+
+	const agent = await getAiAgentForWebsite(params.db, {
+		websiteId: websiteData.id,
+		organizationId: websiteData.organizationId,
+	});
+
+	if (!agent || agent.id !== params.aiAgentId) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "AI agent not found",
+		});
+	}
+
+	return { websiteData, agent };
 }
 
 const RESERVED_TOOL_SKILL_NAME_SET = new Set<string>(
@@ -720,71 +904,108 @@ export const aiAgentRouter = createTRPCRouter({
 			return getBehaviorSettings(agent);
 		}),
 
+	getPromptStudio: protectedProcedure
+		.input(getPromptStudioRequestSchema)
+		.output(getPromptStudioResponseSchema)
+		.query(async ({ ctx: { db, user }, input }) => {
+			const { websiteData, agent } = await getWebsiteAndAgentForPromptStudio({
+				db,
+				userId: user.id,
+				websiteSlug: input.websiteSlug,
+				aiAgentId: input.aiAgentId,
+			});
+
+			return buildPromptStudioEntries({
+				db,
+				organizationId: websiteData.organizationId,
+				websiteId: websiteData.id,
+				aiAgent: agent,
+			});
+		}),
+
+	upsertCorePrompt: protectedProcedure
+		.input(upsertCorePromptRequestSchema)
+		.output(upsertCorePromptResponseSchema)
+		.mutation(async ({ ctx: { db, user }, input }) => {
+			const { websiteData, agent } = await getWebsiteAndAgentForPromptStudio({
+				db,
+				userId: user.id,
+				websiteSlug: input.websiteSlug,
+				aiAgentId: input.aiAgentId,
+			});
+
+			return upsertEditableCorePromptDocument({
+				db,
+				organizationId: websiteData.organizationId,
+				websiteId: websiteData.id,
+				aiAgent: agent,
+				updatedByUserId: user.id,
+				documentName: input.documentName,
+				content: input.content,
+			});
+		}),
+
+	resetCorePrompt: protectedProcedure
+		.input(resetCorePromptRequestSchema)
+		.output(resetCorePromptResponseSchema)
+		.mutation(async ({ ctx: { db, user }, input }) => {
+			const { websiteData } = await getWebsiteAndAgentForPromptStudio({
+				db,
+				userId: user.id,
+				websiteSlug: input.websiteSlug,
+				aiAgentId: input.aiAgentId,
+			});
+
+			return resetEditableCorePromptDocument({
+				db,
+				organizationId: websiteData.organizationId,
+				websiteId: websiteData.id,
+				aiAgentId: input.aiAgentId,
+				documentName: input.documentName,
+			});
+		}),
+
 	getBehaviorStudio: protectedProcedure
 		.input(getBehaviorStudioRequestSchema)
 		.output(getBehaviorStudioResponseSchema)
 		.query(async ({ ctx: { db, user }, input }) => {
-			const websiteData = await getWebsiteBySlugWithAccess(db, {
+			const { websiteData, agent } = await getWebsiteAndAgentForPromptStudio({
+				db,
 				userId: user.id,
 				websiteSlug: input.websiteSlug,
+				aiAgentId: input.aiAgentId,
 			});
 
-			if (!websiteData) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: "Website not found or access denied",
-				});
-			}
-
-			const agent = await getAiAgentForWebsite(db, {
-				websiteId: websiteData.id,
-				organizationId: websiteData.organizationId,
-			});
-
-			if (!agent || agent.id !== input.aiAgentId) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: "AI agent not found",
-				});
-			}
-
-			const coreDocuments = await listAiAgentPromptDocuments(
+			const promptStudio = await buildPromptStudioEntries({
 				db,
-				{
-					organizationId: websiteData.organizationId,
-					websiteId: websiteData.id,
-					aiAgentId: input.aiAgentId,
-				},
-				{ kind: "core" }
-			);
-			const coreDocumentByName = new Map(
-				coreDocuments
-					.filter((document) => document.enabled)
-					.map((document) => [document.name, document])
+				organizationId: websiteData.organizationId,
+				websiteId: websiteData.id,
+				aiAgent: agent,
+			});
+			const corePromptByDocumentName = new Map(
+				promptStudio.corePrompts.map((entry) => [entry.documentName, entry])
 			);
 
 			const behaviors = getBehaviorPromptCatalog().map((behavior) => {
-				const overrideDocument = coreDocumentByName.get(behavior.documentName);
-				const content = overrideDocument?.content ?? behavior.defaultContent;
-				const hasOverride = overrideDocument
-					? overrideDocument.content.trim() !== behavior.defaultContent.trim()
-					: false;
+				const corePrompt = corePromptByDocumentName.get(behavior.documentName);
+				const defaultContent =
+					corePrompt?.defaultContent ?? behavior.defaultContent;
 
 				return {
 					id: behavior.id,
 					label: behavior.label,
 					description: behavior.description,
 					documentName: behavior.documentName,
-					content,
-					defaultContent: behavior.defaultContent,
-					hasOverride,
-					documentId: overrideDocument?.id ?? null,
-					presets: [...behavior.presets],
+					content: corePrompt?.content ?? defaultContent,
+					defaultContent,
+					hasOverride: corePrompt?.hasOverride ?? false,
+					documentId: corePrompt?.documentId ?? null,
+					presets: corePrompt ? [...corePrompt.presets] : [...behavior.presets],
 				};
 			});
 
 			return {
-				aiAgentId: agent.id,
+				aiAgentId: promptStudio.aiAgentId,
 				behaviors,
 			};
 		}),
@@ -793,29 +1014,12 @@ export const aiAgentRouter = createTRPCRouter({
 		.input(upsertBehaviorPromptRequestSchema)
 		.output(upsertBehaviorPromptResponseSchema)
 		.mutation(async ({ ctx: { db, user }, input }) => {
-			const websiteData = await getWebsiteBySlugWithAccess(db, {
+			const { websiteData, agent } = await getWebsiteAndAgentForPromptStudio({
+				db,
 				userId: user.id,
 				websiteSlug: input.websiteSlug,
+				aiAgentId: input.aiAgentId,
 			});
-
-			if (!websiteData) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: "Website not found or access denied",
-				});
-			}
-
-			const agent = await getAiAgentForWebsite(db, {
-				websiteId: websiteData.id,
-				organizationId: websiteData.organizationId,
-			});
-
-			if (!agent || agent.id !== input.aiAgentId) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: "AI agent not found",
-				});
-			}
 
 			const behaviorDefinition = getBehaviorPromptDefinition(input.behaviorId);
 			if (!behaviorDefinition) {
@@ -825,75 +1029,27 @@ export const aiAgentRouter = createTRPCRouter({
 				});
 			}
 
-			const nextContent = input.content.trim();
-			if (!nextContent) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: "Behavior content cannot be empty",
-				});
-			}
-
-			const defaultContent = behaviorDefinition.defaultContent.trim();
-			if (nextContent === defaultContent) {
-				const removed = await deleteAiAgentCorePromptDocumentByName(db, {
-					organizationId: websiteData.organizationId,
-					websiteId: websiteData.id,
-					aiAgentId: input.aiAgentId,
-					name: behaviorDefinition.documentName,
-				});
-
-				return {
-					removed,
-					document: null,
-				};
-			}
-
-			try {
-				const document = await upsertAiAgentCorePromptDocument(db, {
-					organizationId: websiteData.organizationId,
-					websiteId: websiteData.id,
-					aiAgentId: input.aiAgentId,
-					name: behaviorDefinition.documentName,
-					content: nextContent,
-					updatedByUserId: user.id,
-				});
-
-				return {
-					removed: false,
-					document: toPromptDocumentResponse(document),
-				};
-			} catch (error) {
-				handlePromptDocumentMutationError(error);
-			}
+			return upsertEditableCorePromptDocument({
+				db,
+				organizationId: websiteData.organizationId,
+				websiteId: websiteData.id,
+				aiAgent: agent,
+				updatedByUserId: user.id,
+				documentName: behaviorDefinition.documentName,
+				content: input.content,
+			});
 		}),
 
 	resetBehaviorPrompt: protectedProcedure
 		.input(resetBehaviorPromptRequestSchema)
 		.output(resetBehaviorPromptResponseSchema)
 		.mutation(async ({ ctx: { db, user }, input }) => {
-			const websiteData = await getWebsiteBySlugWithAccess(db, {
+			const { websiteData } = await getWebsiteAndAgentForPromptStudio({
+				db,
 				userId: user.id,
 				websiteSlug: input.websiteSlug,
+				aiAgentId: input.aiAgentId,
 			});
-
-			if (!websiteData) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: "Website not found or access denied",
-				});
-			}
-
-			const agent = await getAiAgentForWebsite(db, {
-				websiteId: websiteData.id,
-				organizationId: websiteData.organizationId,
-			});
-
-			if (!agent || agent.id !== input.aiAgentId) {
-				throw new TRPCError({
-					code: "NOT_FOUND",
-					message: "AI agent not found",
-				});
-			}
 
 			const behaviorDefinition = getBehaviorPromptDefinition(input.behaviorId);
 			if (!behaviorDefinition) {
@@ -903,16 +1059,13 @@ export const aiAgentRouter = createTRPCRouter({
 				});
 			}
 
-			const removed = await deleteAiAgentCorePromptDocumentByName(db, {
+			return resetEditableCorePromptDocument({
+				db,
 				organizationId: websiteData.organizationId,
 				websiteId: websiteData.id,
 				aiAgentId: input.aiAgentId,
-				name: behaviorDefinition.documentName,
+				documentName: behaviorDefinition.documentName,
 			});
-
-			return {
-				removed,
-			};
 		}),
 
 	getCapabilitiesStudio: protectedProcedure

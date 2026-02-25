@@ -2,6 +2,7 @@ import type {
 	AiAgentBehaviorPromptDocumentName,
 	AiAgentBehaviorPromptId,
 	AiAgentBehaviorPromptPreset,
+	AiAgentEditableCorePromptDocumentName,
 } from "@cossistant/types";
 import { PROMPT_TEMPLATES } from "../prompts/templates";
 
@@ -11,6 +12,13 @@ export type BehaviorPromptDefinition = {
 	description: string;
 	documentName: AiAgentBehaviorPromptDocumentName;
 	defaultContent: string;
+	presets: readonly AiAgentBehaviorPromptPreset[];
+};
+
+export type CorePromptStudioDefinition = {
+	documentName: AiAgentEditableCorePromptDocumentName;
+	label: string;
+	description: string;
 	presets: readonly AiAgentBehaviorPromptPreset[];
 };
 
@@ -98,6 +106,52 @@ const BEHAVIOR_PROMPT_CATALOG = [
 	},
 ] as const satisfies readonly BehaviorPromptDefinition[];
 
+const EDITABLE_CORE_PROMPT_CATALOG = [
+	{
+		documentName: "behaviour.md",
+		label: "Response behavior",
+		description:
+			"Guidelines for escalation behavior and mode-aware response constraints.",
+		presets: [],
+	},
+	{
+		documentName: "participation.md",
+		label: "Participation policy",
+		description:
+			"Rules for when the AI should reply versus stay silent in mixed human/AI conversations.",
+		presets: [],
+	},
+	{
+		documentName: "grounding.md",
+		label: "Grounding policy",
+		description:
+			"Rules that require retrieval-first behavior for factual/product/policy responses.",
+		presets: [],
+	},
+	{
+		documentName: "capabilities.md",
+		label: "Capabilities policy",
+		description:
+			"Defines what actions/tools the AI is allowed or disallowed to perform.",
+		presets: [],
+	},
+	{
+		documentName: "visitor-contact.md",
+		label: "How and when to get visitor's contact details",
+		description:
+			"Define when and how the agent asks for visitor identity details (name/email).",
+		presets: VISITOR_CONTACT_PRESETS,
+	},
+	{
+		documentName: "decision.md",
+		label:
+			"How the agent should decide when to respond or not in a conversation",
+		description:
+			"Control the decision gate policy that determines when the AI should respond, observe, or assist the team.",
+		presets: SMART_DECISION_PRESETS,
+	},
+] as const satisfies readonly CorePromptStudioDefinition[];
+
 const BEHAVIOR_PROMPT_CATALOG_BY_ID = new Map(
 	BEHAVIOR_PROMPT_CATALOG.map((behavior) => [behavior.id, behavior])
 );
@@ -106,12 +160,20 @@ const BEHAVIOR_PROMPT_CATALOG_BY_DOCUMENT_NAME = new Map(
 	BEHAVIOR_PROMPT_CATALOG.map((behavior) => [behavior.documentName, behavior])
 );
 
+const EDITABLE_CORE_PROMPT_CATALOG_BY_DOCUMENT_NAME = new Map(
+	EDITABLE_CORE_PROMPT_CATALOG.map((entry) => [entry.documentName, entry])
+);
+
 export const EDITABLE_BEHAVIOR_CORE_DOCUMENT_NAMES = [
 	...new Set(BEHAVIOR_PROMPT_CATALOG.map((behavior) => behavior.documentName)),
 ] as const;
 
 export function getBehaviorPromptCatalog(): readonly BehaviorPromptDefinition[] {
 	return BEHAVIOR_PROMPT_CATALOG;
+}
+
+export function getEditableCorePromptCatalog(): readonly CorePromptStudioDefinition[] {
+	return EDITABLE_CORE_PROMPT_CATALOG;
 }
 
 export function getBehaviorPromptDefinition(
@@ -124,4 +186,12 @@ export function getBehaviorPromptDefinitionByDocumentName(
 	documentName: AiAgentBehaviorPromptDocumentName
 ): BehaviorPromptDefinition | null {
 	return BEHAVIOR_PROMPT_CATALOG_BY_DOCUMENT_NAME.get(documentName) ?? null;
+}
+
+export function getEditableCorePromptDefinitionByDocumentName(
+	documentName: AiAgentEditableCorePromptDocumentName
+): CorePromptStudioDefinition | null {
+	return (
+		EDITABLE_CORE_PROMPT_CATALOG_BY_DOCUMENT_NAME.get(documentName) ?? null
+	);
 }

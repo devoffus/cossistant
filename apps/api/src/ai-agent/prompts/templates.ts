@@ -52,14 +52,7 @@ The visitor is not identified yet and the conversation is underway. Ask for thei
 	 */
 	TOOLS_AVAILABLE: `## Available Tools
 
-{toolList}
-
-**Side-effect tools (use alongside your main workflow):**
-- Call \`updateConversationTitle\` early when the main topic becomes clear
-- Call \`updateSentiment\` when you notice the visitor's tone shifting
-- Call \`setPriority\` for urgent issues (outages, critical bugs, security)
-
-These are optional — use them when appropriate, before your final action tool.`,
+{toolList}`,
 
 	/**
 	 * Participation guidance for mixed human/AI conversations.
@@ -96,19 +89,6 @@ Rules:
 - For greetings (hi, hello, hey): respond proactively when humanActive=false — engage and start helping. When humanActive=true, prefer observe unless the visitor clearly needs help now.
 - Prefer observe for short acknowledgements (ok, thanks, got it) or banter without a clear need, especially during active human handling.
 - If uncertain, choose respond with a concise, useful next step.`,
-
-	/**
-	 * Reinforcement of tools-only workflow
-	 */
-	STRUCTURED_OUTPUT: `## IMPORTANT: Tools Are Required
-
-You cannot communicate without tools. Follow this pattern:
-
-1. Send messages with sendMessage() and/or sendPrivateMessage()
-2. Optionally call side-effect tools (updateConversationTitle, updateSentiment, setPriority)
-3. Call exactly ONE action tool to finish (respond, escalate, resolve, skip, markSpam, wait)
-
-The visitor ONLY sees messages from sendMessage(). If it is not available, use sendPrivateMessage only.`,
 
 	/**
 	 * Grounding instructions - CRITICAL for preventing hallucinations

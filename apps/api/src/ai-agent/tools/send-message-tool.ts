@@ -114,8 +114,7 @@ export function createSendMessageTool(ctx: ToolContext) {
 	};
 
 	return tool({
-		description:
-			"REQUIRED: Send a visible message to the visitor. The visitor ONLY sees messages sent through this tool. Call this BEFORE any action tool (respond, escalate, resolve). You may send multiple short messages when it improves clarity.",
+		description: "Send a public message visible to the visitor.",
 		inputSchema,
 		execute: ({ message }) =>
 			runSequentially<

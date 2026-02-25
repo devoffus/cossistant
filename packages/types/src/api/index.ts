@@ -1,6 +1,7 @@
 // Export all API schemas and types
 export * from "./ai-agent";
 export * from "./ai-agent-capabilities";
+export * from "./ai-agent-defaults";
 export * from "./common";
 export * from "./contact";
 export * from "./conversation";

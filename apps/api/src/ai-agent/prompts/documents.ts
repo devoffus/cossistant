@@ -18,14 +18,27 @@ export const RESERVED_CORE_PROMPT_DOCUMENT_NAMES = new Set<string>(
 	CORE_PROMPT_DOCUMENT_NAMES
 );
 
-export const EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAMES = [
+export const EDITABLE_CORE_PROMPT_DOCUMENT_NAMES = [
+	"behaviour.md",
+	"participation.md",
+	"grounding.md",
+	"capabilities.md",
 	"visitor-contact.md",
 	"decision.md",
 ] as const;
 
-export const EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAME_SET = new Set<string>(
-	EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAMES
+export const EDITABLE_CORE_PROMPT_DOCUMENT_NAME_SET = new Set<string>(
+	EDITABLE_CORE_PROMPT_DOCUMENT_NAMES
 );
+
+/**
+ * Backward-compatible aliases kept while behavior-specific studio endpoints
+ * remain available as wrappers around the generic core prompt studio.
+ */
+export const EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAMES =
+	EDITABLE_CORE_PROMPT_DOCUMENT_NAMES;
+export const EDITABLE_BEHAVIOR_CORE_PROMPT_DOCUMENT_NAME_SET =
+	EDITABLE_CORE_PROMPT_DOCUMENT_NAME_SET;
 
 export const SKILL_PROMPT_NAME_REGEX = /^[a-z0-9][a-z0-9-]{1,62}\.md$/;
 
