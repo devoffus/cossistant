@@ -66,7 +66,6 @@ export const auth = betterAuth({
 		},
 	},
 	plugins: [
-		dash(),
 		organizationPlugin({
 			teams: {
 				enabled: true,

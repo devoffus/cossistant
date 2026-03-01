@@ -9,7 +9,7 @@ export const authClient = createAuthClient({
 	fetchOptions: {
 		credentials: "include" as const,
 	},
-	plugins: [organizationClient(), adminClient(), sentinelClient()],
+	plugins: [organizationClient(), adminClient()],
 });
 
 // Alias requestPasswordReset as forgetPassword for backwards compatibility
