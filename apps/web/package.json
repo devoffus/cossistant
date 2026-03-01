@@ -6,6 +6,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.18",
     "@ai-sdk/react": "^3.0.51",
+    "@better-auth/infra": "^0.1.8",
     "@cossistant/api": "workspace:*",
     "@cossistant/core": "workspace:*",
     "@cossistant/location": "workspace:*",

@@ -2,10 +2,12 @@ import { db } from "@api/db";
 import * as schema from "@api/db/schema";
 import { env } from "@api/env";
 import { generateULID } from "@api/utils/db/ids";
+import { dash } from "@better-auth/infra";
 import { ResetPasswordEmail, sendEmail } from "@cossistant/transactional";
 import { polar, portal, usage } from "@polar-sh/better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
+
 import {
 	admin,
 	anonymous,
@@ -64,6 +66,7 @@ export const auth = betterAuth({
 		},
 	},
 	plugins: [
+		dash(),
 		organizationPlugin({
 			teams: {
 				enabled: true,

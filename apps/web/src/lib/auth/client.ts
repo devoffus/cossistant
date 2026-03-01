@@ -1,3 +1,4 @@
+import { sentinelClient } from "@better-auth/infra/client";
 import { adminClient, organizationClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
@@ -8,7 +9,7 @@ export const authClient = createAuthClient({
 	fetchOptions: {
 		credentials: "include" as const,
 	},
-	plugins: [organizationClient(), adminClient()],
+	plugins: [organizationClient(), adminClient(), sentinelClient()],
 });
 
 // Alias requestPasswordReset as forgetPassword for backwards compatibility
