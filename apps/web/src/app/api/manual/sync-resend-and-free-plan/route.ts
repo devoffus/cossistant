@@ -18,7 +18,6 @@ import {
 	type RunMode,
 } from "./polar-sync-logic";
 
-export const runtime = "nodejs";
 export const maxDuration = 800;
 
 type RouteFailure =
