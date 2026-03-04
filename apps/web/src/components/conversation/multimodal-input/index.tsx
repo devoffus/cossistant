@@ -67,12 +67,12 @@ export function getAiPauseStatusLabel(
 	nowMs: number = Date.now()
 ): string {
 	if (!aiPausedUntil) {
-		return "Pause AI answers";
+		return "AI can answer to conversation";
 	}
 
 	const pauseUntilMs = Date.parse(aiPausedUntil);
 	if (Number.isNaN(pauseUntilMs) || pauseUntilMs <= nowMs) {
-		return "Pause AI answers";
+		return "AI can answer to conversation";
 	}
 
 	const remainingMinutes = Math.max(
@@ -378,7 +378,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 	};
 
 	return (
-		<div className="absolute right-0 bottom-4 left-0 z-10 mx-auto w-full px-4 xl:max-w-xl xl:px-0 2xl:max-w-2xl">
+		<div className="absolute right-0 bottom-1 left-0 z-10 mx-auto flex w-full flex-col gap-1 px-4 xl:max-w-xl xl:px-0 2xl:max-w-2xl">
 			<form
 				className="flex max-h-[50vh] flex-col gap-2"
 				onSubmit={handleFormSubmit}
@@ -563,41 +563,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 								/>
 							</div>
 							<div className="flex items-center justify-between pr-1 pb-1 pl-3">
-								{onAiPauseAction ? (
-									<Select
-										onValueChange={handleAiPauseSelectValueChange}
-										value={AI_PAUSE_STATUS_VALUE}
-									>
-										<SelectTrigger
-											className="h-7 border-0 bg-transparent px-1 py-0 text-muted-foreground text-xs shadow-none hover:bg-transparent focus-visible:ring-0 [&_svg]:size-3.5 [&_svg]:opacity-70"
-											disabled={isAiPauseControlDisabled}
-											size="sm"
-										>
-											<span className="truncate">{aiPauseStatus.label}</span>
-										</SelectTrigger>
-										<SelectContent align="start">
-											<SelectItem
-												className="hidden"
-												value={AI_PAUSE_STATUS_VALUE}
-											>
-												{aiPauseStatus.label}
-											</SelectItem>
-											{aiPauseMenuActions.map((action, index) => (
-												<Fragment key={action}>
-													{aiPauseStatus.isPaused && index === 1 ? (
-														<SelectSeparator />
-													) : null}
-													<SelectItem value={action}>
-														{getAiPauseActionLabel(action)}
-													</SelectItem>
-												</Fragment>
-											))}
-										</SelectContent>
-									</Select>
-								) : (
-									<div />
-								)}
-
+								<div />
 								<div className="flex items-center gap-0.5">
 									{/* File attachment button */}
 									{onFileSelect && (
@@ -684,6 +650,41 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 					</div>
 				</div>
 			</form>
+			<div className="flex items-center justify-between pl-3">
+				{onAiPauseAction ? (
+					<Select
+						onValueChange={handleAiPauseSelectValueChange}
+						value={AI_PAUSE_STATUS_VALUE}
+					>
+						<TooltipOnHover content="Change AI presence in conversation">
+							<SelectTrigger
+								className="h-6 border-0 bg-transparent px-0 py-0 text-muted-foreground text-xs shadow-none hover:cursor-pointer hover:bg-transparent hover:text-primary focus-visible:ring-0 dark:bg-transparent dark:hover:bg-transparent dark:hover:text-primary [&_svg]:size-3.5 [&_svg]:opacity-70"
+								disabled={isAiPauseControlDisabled}
+								size="sm"
+							>
+								<span className="truncate">{aiPauseStatus.label}</span>
+							</SelectTrigger>
+						</TooltipOnHover>
+						<SelectContent align="start" className="-ml-3">
+							<SelectItem className="hidden" value={AI_PAUSE_STATUS_VALUE}>
+								{aiPauseStatus.label}
+							</SelectItem>
+							{aiPauseMenuActions.map((action, index) => (
+								<Fragment key={action}>
+									{aiPauseStatus.isPaused && index === 1 ? (
+										<SelectSeparator />
+									) : null}
+									<SelectItem value={action}>
+										{getAiPauseActionLabel(action)}
+									</SelectItem>
+								</Fragment>
+							))}
+						</SelectContent>
+					</Select>
+				) : (
+					<div />
+				)}
+			</div>
 		</div>
 	);
 };
