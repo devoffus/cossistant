@@ -212,6 +212,7 @@ export function ConversationTimelineList({
 			)}
 			id="conversation-timeline"
 			items={timelineItems}
+			maskHeight="100px"
 			onScrollStart={onFetchMoreIfNeeded}
 			ref={ref ?? messageListRef}
 			style={{

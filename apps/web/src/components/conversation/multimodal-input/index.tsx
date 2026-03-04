@@ -378,7 +378,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 	};
 
 	return (
-		<div className="absolute right-0 bottom-1 left-0 z-10 mx-auto flex w-full flex-col gap-1 px-4 xl:max-w-xl xl:px-0 2xl:max-w-2xl">
+		<div className="absolute right-0 bottom-0 left-0 z-10 mx-auto flex w-full flex-col gap-1 bg-background px-4 pb-1 xl:max-w-xl xl:px-0 2xl:max-w-2xl dark:bg-background-50">
 			<form
 				className="flex max-h-[50vh] flex-col gap-2"
 				onSubmit={handleFormSubmit}
